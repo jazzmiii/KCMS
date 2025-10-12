@@ -5,6 +5,7 @@ const app = require('./app');
 const redis = require('./config/redis');
 const { startSchedulers } = require('./workers/bootstrap');
 const { scheduleBatching } = require('./workers/notification.batcher');
+const { startRecruitmentScheduler } = require('./workers/recruitment.scheduler');
 const { verifyTransport } = require('./utils/mail');
 
 const PORT = config.PORT;
@@ -45,6 +46,16 @@ async function start() {
       console.log(`Notification batching scheduled every ${every}ms`);
     } catch (e) {
       console.error('Failed to schedule notification batching:', e);
+    }
+  }
+
+  // Start recruitment lifecycle scheduler
+  if (config.START_SCHEDULERS) {
+    try {
+      startRecruitmentScheduler(60000); // Check every minute
+      console.log('Recruitment lifecycle scheduler started');
+    } catch (e) {
+      console.error('Failed to start recruitment scheduler:', e);
     }
   }
 

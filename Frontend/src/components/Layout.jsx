@@ -50,8 +50,8 @@ const Layout = ({ children }) => {
   };
 
   const getDashboardLink = () => {
-    if (user?.globalRoles?.includes('admin')) return '/admin/dashboard';
-    if (user?.globalRoles?.includes('coordinator')) return '/coordinator/dashboard';
+    if (user?.roles?.global === 'admin') return '/admin/dashboard';
+    if (user?.roles?.global === 'coordinator') return '/coordinator/dashboard';
     if (user?.clubRoles?.some(cr => cr.roles.includes('core') || cr.roles.includes('president'))) {
       return '/core/dashboard';
     }
@@ -70,7 +70,11 @@ const Layout = ({ children }) => {
               <Link to="/clubs" className="nav-link">Clubs</Link>
               <Link to="/events" className="nav-link">Events</Link>
               <Link to="/recruitments" className="nav-link">Recruitments</Link>
-              {user?.globalRoles?.includes('admin') && (
+              <Link to="/gallery" className="nav-link">Gallery</Link>
+              {(user?.roles?.global === 'admin' || user?.roles?.global === 'coordinator') && (
+                <Link to="/reports" className="nav-link">Reports</Link>
+              )}
+              {user?.roles?.global === 'admin' && (
                 <Link to="/admin/users" className="nav-link">Users</Link>
               )}
             </div>
@@ -110,9 +114,19 @@ const Layout = ({ children }) => {
                       <p className="no-notifications">No notifications</p>
                     )}
                   </div>
+                  <div className="notification-footer">
+                    <Link to="/notifications" onClick={() => setShowNotifications(false)}>
+                      View All Notifications
+                    </Link>
+                  </div>
                 </div>
               )}
             </div>
+
+            {/* Search Icon */}
+            <Link to="/search" className="icon-btn">
+              <span className="icon">🔍</span>
+            </Link>
 
             {/* User Menu */}
             <div className="user-menu-wrapper">
@@ -127,7 +141,7 @@ const Layout = ({ children }) => {
                     <p className="user-name-full">{user?.name}</p>
                     <p className="user-email">{user?.email}</p>
                     <span className="user-role">
-                      {user?.globalRoles?.join(', ') || 'Student'}
+                      {user?.roles?.global || 'Student'}
                     </span>
                   </div>
                   <div className="user-menu-divider"></div>

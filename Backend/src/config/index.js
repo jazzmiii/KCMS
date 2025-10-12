@@ -17,6 +17,11 @@ const base = {
   // JWT Configuration
   JWT_SECRET: process.env.JWT_SECRET,
   JWT_EXPIRY: process.env.JWT_EXPIRY || '15m',
+  JWT_ALGORITHM: process.env.JWT_ALGORITHM || 'HS256',
+  JWT_PRIVATE_KEY_PATH: process.env.JWT_PRIVATE_KEY_PATH,
+  JWT_PUBLIC_KEY_PATH: process.env.JWT_PUBLIC_KEY_PATH,
+  JWT_PRIVATE_KEY: process.env.JWT_PRIVATE_KEY,
+  JWT_PUBLIC_KEY: process.env.JWT_PUBLIC_KEY,
   REFRESH_TOKEN_SECRET: process.env.REFRESH_TOKEN_SECRET,
   REFRESH_TOKEN_EXPIRY: process.env.REFRESH_TOKEN_EXPIRY || '7d',
   

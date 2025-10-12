@@ -18,7 +18,7 @@ const ProtectedRoute = ({ children, requiredRole }) => {
     return <Navigate to="/login" replace />;
   }
 
-  if (requiredRole && !user.globalRoles?.includes(requiredRole)) {
+  if (requiredRole && user.roles?.global !== requiredRole) {
     return <Navigate to="/dashboard" replace />;
   }
 

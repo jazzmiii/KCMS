@@ -38,6 +38,18 @@ import CreateEventPage from './pages/events/CreateEventPage';
 import ProfilePage from './pages/user/ProfilePage';
 import UsersManagementPage from './pages/user/UsersManagementPage';
 
+// Notification Pages
+import NotificationsPage from './pages/notifications/NotificationsPage';
+
+// Reports Pages
+import ReportsPage from './pages/reports/ReportsPage';
+
+// Media Pages
+import GalleryPage from './pages/media/GalleryPage';
+
+// Search Pages
+import SearchPage from './pages/search/SearchPage';
+
 // Components
 import ProtectedRoute from './components/ProtectedRoute';
 import NotFound from './pages/NotFound';
@@ -198,6 +210,46 @@ function App() {
             element={
               <ProtectedRoute requiredRole="admin">
                 <UsersManagementPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Notification Routes */}
+          <Route
+            path="/notifications"
+            element={
+              <ProtectedRoute>
+                <NotificationsPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Reports Routes */}
+          <Route
+            path="/reports"
+            element={
+              <ProtectedRoute>
+                <ReportsPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Media/Gallery Routes */}
+          <Route
+            path="/gallery"
+            element={
+              <ProtectedRoute>
+                <GalleryPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Search Routes */}
+          <Route
+            path="/search"
+            element={
+              <ProtectedRoute>
+                <SearchPage />
               </ProtectedRoute>
             }
           />

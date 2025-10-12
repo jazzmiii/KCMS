@@ -1,5 +1,6 @@
 // src/modules/audit/audit.service.js
 const auditQueue = require('../../queues/audit.queue');
+const mongoose = require('mongoose');
 
 class AuditService {
   /**
@@ -7,6 +8,10 @@ class AuditService {
    * @param {Object} entry  keys: user, action, target, oldValue, newValue, ip, userAgent
    */
   async log(entry) {
+    if (!auditQueue || typeof auditQueue.add !== 'function') {
+      console.error('auditQueue is not properly initialized:', auditQueue);
+      throw new Error('Audit queue is not available');
+    }
     await auditQueue.add('log', entry);
   }
 

@@ -19,6 +19,8 @@ const ForgotPasswordPage = () => {
     try {
       await authService.forgotPassword({ identifier });
       setSuccess('Password reset instructions sent to your email!');
+      // Store identifier in sessionStorage as backup
+      sessionStorage.setItem('resetIdentifier', identifier);
       setTimeout(() => {
         navigate('/reset-password', { state: { identifier } });
       }, 2000);

@@ -23,7 +23,7 @@ module.exports = {
     name: Joi.string().min(2).max(50).required(),
     department: Joi.string().required(),
     batch: Joi.string().required(),
-    year: Joi.number().integer().min(1900).max(2100).required(),
+    year: Joi.number().integer().min(1).max(5).required(),
     phone: Joi.string().optional(),
     profilePhoto: Joi.string().uri().optional(),
     linkedIn: Joi.string().uri().optional(),
@@ -40,16 +40,16 @@ module.exports = {
   }),
 
   forgotPassword: Joi.object({
-    email: Joi.string().email().required()
+    identifier: Joi.string().required() // email or rollNumber
   }),
 
   verifyReset: Joi.object({
-    email: Joi.string().email().required(),
+    identifier: Joi.string().required(), // email or rollNumber
     otp: Joi.string().length(6).pattern(/^\d{6}$/).required()
   }),
 
   resetPassword: Joi.object({
-    email: Joi.string().email().required(),
+    identifier: Joi.string().required(), // email or rollNumber
     otp: Joi.string().length(6).pattern(/^\d{6}$/).required(),
     newPassword: Joi.string().min(8)
                      .pattern(/[A-Z]/).pattern(/[a-z]/)

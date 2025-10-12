@@ -32,7 +32,7 @@ const EventsPage = () => {
 
   const canCreateEvent = user?.clubRoles?.some(cr => 
     cr.roles.includes('president') || cr.roles.includes('core')
-  ) || user?.globalRoles?.includes('admin');
+  ) || user?.roles?.global === 'admin';
 
   const getStatusBadgeClass = (status) => {
     switch (status) {

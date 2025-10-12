@@ -93,7 +93,7 @@ exports.logoutAll = async (req, res, next) => {
 
 exports.forgotPassword = async (req, res, next) => {
   try {
-    await authSvc.forgotPassword(req.body.email, {
+    await authSvc.forgotPassword(req.body.identifier, {
       id: null,
       ip: req.ip,
       userAgent: req.headers['user-agent']
@@ -106,6 +106,7 @@ exports.forgotPassword = async (req, res, next) => {
 
 exports.verifyReset = async (req, res, next) => {
   try {
+    console.log('Verify reset request body:', req.body);
     await authSvc.verifyResetOtp(req.body, {
       id: null,
       ip: req.ip,

@@ -55,8 +55,8 @@ const ClubDetailPage = () => {
     );
   }
 
-  const canManage = user?.globalRoles?.includes('admin') || 
-                    user?.globalRoles?.includes('coordinator') ||
+  const canManage = user?.roles?.global === 'admin' || 
+                    user?.roles?.global === 'coordinator' ||
                     user?.clubRoles?.some(cr => cr.clubId === clubId && cr.roles.includes('president'));
 
   return (

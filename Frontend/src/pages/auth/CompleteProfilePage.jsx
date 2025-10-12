@@ -41,7 +41,12 @@ const CompleteProfilePage = () => {
     setLoading(true);
 
     try {
-      await authService.completeProfile(formData);
+      // Convert year to number before sending
+      const profileData = {
+        ...formData,
+        year: parseInt(formData.year, 10)
+      };
+      await authService.completeProfile(profileData);
       navigate('/dashboard');
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to complete profile. Please try again.');

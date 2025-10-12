@@ -14,7 +14,7 @@ module.exports = {
     name: Joi.string().min(2).max(50),
     department: Joi.string().max(100),
     batch: Joi.string().max(20),
-    year: Joi.number().integer().min(1900).max(2100),
+    year: Joi.number().integer().min(1).max(4), // Year of study: 1-4
     phone: Joi.string().max(20),
     profilePhoto: Joi.string().uri(),
     linkedIn: Joi.string().uri(),
@@ -73,7 +73,7 @@ module.exports = {
       name: Joi.string().min(2).max(50),
       department: Joi.string(),
       batch: Joi.string(),
-      year: Joi.number().integer().min(1900).max(2100),
+      year: Joi.number().integer().min(1).max(4), // Year of study: 1-4
       phone: Joi.string(),
       profilePhoto: Joi.string().uri(),
       linkedIn: Joi.string().uri(),

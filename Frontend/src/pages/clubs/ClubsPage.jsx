@@ -50,7 +50,7 @@ const ClubsPage = () => {
             <h1>Explore Clubs</h1>
             <p>Discover and join clubs that match your interests</p>
           </div>
-          {user?.globalRoles?.includes('admin') && (
+          {user?.roles?.global === 'admin' && (
             <Link to="/clubs/create" className="btn btn-primary">
               + Create Club
             </Link>

@@ -3,6 +3,7 @@ const { Club }       = require('./club.model');
 const { Membership } = require('./membership.model');
 const cloudinary     = require('../../utils/cloudinary');
 const redis          = require('../../config/redis');
+const mongoose       = require('mongoose');
 const auditService        = require('../audit/audit.service');
 const notificationService = require('../notification/notification.service');
 
@@ -26,7 +27,7 @@ class ClubService {
     // Upload logo if provided
     let logoUrl = '';
     if (logoFile) {
-      const res = await cloudinary.uploadImage(logoFile.path, {
+      const res = await cloudinary.uploader.upload(logoFile.path, {
         folder: `clubs/${data.name}/logo`,
         width: 500, height: 500, crop: 'limit'
       });

@@ -15,8 +15,10 @@ const recruitmentRoutes = require('./modules/recruitment/recruitment.routes');
 const notificationRoutes = require('./modules/notification/notification.routes');
 const reportRoutes = require('./modules/reports/report.routes');
 const searchRoutes = require('./modules/search/search.routes');
+const adminRoutes = require('./modules/admin/admin.routes');
 
 const error = require('./middlewares/error');
+const { maintenanceMode } = require('./middlewares/maintenance');
 
 const app = express();
 
@@ -59,6 +61,9 @@ if (config.NODE_ENV !== 'test') {
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
+// Maintenance Mode Check (before routes)
+app.use(maintenanceMode);
+
 // Routes - All routes are prefixed with /api
 app.use('/api/health', healthRoutes);
 app.use('/api/auth', authRoutes);
@@ -70,6 +75,7 @@ app.use('/api/recruitments', recruitmentRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/search', searchRoutes);
+app.use('/api/admin', adminRoutes);
 
 // 404
 app.use((req, res) => res.status(404).json({ message: 'Not Found' }));

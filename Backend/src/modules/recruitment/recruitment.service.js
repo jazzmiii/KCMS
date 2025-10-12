@@ -68,14 +68,32 @@ class RecruitmentService {
         })
       ));
 
-    } else if (action === 'close' && prevStatus === 'open') {
+    } else if (action === 'closeSoon' && prevStatus === 'open') {
+      rec.status = 'closing_soon';
+      // Send 24-hour warning to all applicants and potential applicants
+      const apps = await Application.find({ recruitment: id }).distinct('user');
+      const allUsers = await mongoose.model('User')
+        .find({ status: 'profile_complete', _id: { $nin: apps } })
+        .select('_id');
+      
+      const notifyUsers = [...apps, ...allUsers.map(u => u._id)];
+      await Promise.all(notifyUsers.map(userId =>
+        notificationService.create({
+          user: userId,
+          type: 'recruitment_closing',
+          payload: { recruitmentId: id, title: rec.title, hoursLeft: 24 },
+          priority: 'HIGH'
+        })
+      ));
+
+    } else if (action === 'close' && (prevStatus === 'open' || prevStatus === 'closing_soon')) {
       rec.status = 'closed';
       const apps = await Application.find({ recruitment: id });
       await Promise.all(apps.map(a =>
         notificationService.create({
           user: a.user,
-          type: 'recruitment_closing',
-          payload: { recruitmentId: id, title: rec.title },
+          type: 'application_status',
+          payload: { applicationId: a._id, recruitmentClosed: true },
           priority: 'MEDIUM'
         })
       ));

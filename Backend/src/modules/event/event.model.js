@@ -21,6 +21,7 @@ const EventSchema = new mongoose.Schema(
     },
     qrCodeUrl: String,
     attendanceUrl: String,
+    requiresAdminApproval: { type: Boolean, default: false },
     status: {
       type: String,
       enum: [
@@ -34,7 +35,9 @@ const EventSchema = new mongoose.Schema(
         'archived'
       ],
       default: 'draft'
-    }
+    },
+    reportSubmittedAt: Date,
+    reportDueDate: Date
   },
   { timestamps: true }
 );

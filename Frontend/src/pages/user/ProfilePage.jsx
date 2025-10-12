@@ -13,6 +13,7 @@ const ProfilePage = () => {
     phone: '',
     department: '',
     year: '',
+    batch: '',
   });
   const [passwordData, setPasswordData] = useState({
     currentPassword: '',
@@ -33,10 +34,11 @@ const ProfilePage = () => {
       const response = await userService.getMe();
       setProfile(response.data.user);
       setFormData({
-        name: response.data.user.name || '',
-        phone: response.data.user.phone || '',
-        department: response.data.user.department || '',
-        year: response.data.user.year || '',
+        name: response.data.user.profile?.name || '',
+        phone: response.data.user.profile?.phone || '',
+        department: response.data.user.profile?.department || '',
+        year: response.data.user.profile?.year || '',
+        batch: response.data.user.profile?.batch || '',
       });
     } catch (error) {
       console.error('Error fetching profile:', error);
@@ -87,8 +89,9 @@ const ProfilePage = () => {
 
     try {
       await userService.changePassword({
-        currentPassword: passwordData.currentPassword,
+        oldPassword: passwordData.currentPassword,
         newPassword: passwordData.newPassword,
+        confirmPassword: passwordData.confirmPassword,
       });
       setSuccess('Password changed successfully!');
       setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
@@ -124,11 +127,11 @@ const ProfilePage = () => {
           <div className="profile-card">
             <div className="profile-avatar">
               <div className="avatar-large">
-                {profile?.name?.charAt(0) || 'U'}
+                {profile?.profile?.name?.charAt(0) || 'U'}
               </div>
-              <h2>{profile?.name}</h2>
+              <h2>{profile?.profile?.name}</h2>
               <p className="profile-role">
-                {profile?.globalRoles?.join(', ') || 'Student'}
+                {profile?.roles?.global || 'Student'}
               </p>
             </div>
 
@@ -143,19 +146,19 @@ const ProfilePage = () => {
               </div>
               <div className="info-row">
                 <span className="info-label">Department:</span>
-                <span className="info-value">{profile?.department || 'Not set'}</span>
+                <span className="info-value">{profile?.profile?.department || 'Not set'}</span>
               </div>
               <div className="info-row">
                 <span className="info-label">Year:</span>
-                <span className="info-value">{profile?.year || 'Not set'}</span>
+                <span className="info-value">{profile?.profile?.year || 'Not set'}</span>
               </div>
               <div className="info-row">
                 <span className="info-label">Phone:</span>
-                <span className="info-value">{profile?.phone || 'Not set'}</span>
+                <span className="info-value">{profile?.profile?.phone || 'Not set'}</span>
               </div>
               <div className="info-row">
                 <span className="info-label">Batch:</span>
-                <span className="info-value">{profile?.batch || 'Not set'}</span>
+                <span className="info-value">{profile?.profile?.batch || 'Not set'}</span>
               </div>
             </div>
 
@@ -223,6 +226,18 @@ const ProfilePage = () => {
                     name="phone"
                     value={formData.phone}
                     onChange={handleChange}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="batch">Batch</label>
+                  <input
+                    type="text"
+                    id="batch"
+                    name="batch"
+                    value={formData.batch}
+                    onChange={handleChange}
+                    placeholder="e.g., 2022-2026"
                   />
                 </div>
 

@@ -6,7 +6,7 @@ import '../../styles/Auth.css';
 const ResetPasswordPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const identifier = location.state?.identifier;
+  const identifier = location.state?.identifier || sessionStorage.getItem('resetIdentifier');
 
   const [formData, setFormData] = useState({
     otp: '',
@@ -16,6 +16,14 @@ const ResetPasswordPage = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState(1); // 1: verify OTP, 2: reset password
+  
+  // Redirect if no identifier
+  React.useEffect(() => {
+    if (!identifier) {
+      setError('No reset request found. Please start the password reset process again.');
+      setTimeout(() => navigate('/forgot-password'), 3000);
+    }
+  }, [identifier, navigate]);
 
   const handleChange = (e) => {
     setFormData({
@@ -55,6 +63,7 @@ const ResetPasswordPage = () => {
         otp: formData.otp,
         newPassword: formData.newPassword,
       });
+      sessionStorage.removeItem('resetIdentifier'); // Clean up
       alert('Password reset successful! Please login with your new password.');
       navigate('/login');
     } catch (err) {

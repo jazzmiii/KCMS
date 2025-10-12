@@ -38,7 +38,7 @@ export const AuthProvider = ({ children }) => {
 
   const hasRole = (role) => {
     if (!user) return false;
-    return user.globalRoles?.includes(role);
+    return user.roles?.global === role;
   };
 
   const hasClubRole = (clubId, role) => {

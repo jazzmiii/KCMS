@@ -1,5 +1,5 @@
 //src/modules/auth/auth.service.js
-const jwt       = require('jsonwebtoken');
+const jwtUtil   = require('../../utils/jwt');
 const ms        = require('ms');
 const { v4: uuidv4 } = require('uuid');
 const config    = require('../../../config');
@@ -107,7 +107,7 @@ exports.verifyOtp = async ({ email, otp }, userContext) => {
   });
 
   // return short JWT
-  return jwt.sign({ id: user._id }, config.JWT_SECRET, { expiresIn: '15m' });
+  return jwtUtil.sign({ id: user._id }, { expiresIn: '15m' });
 };
 
 /**
@@ -121,9 +121,8 @@ exports.completeProfile = async (userId, profileData, userContext) => {
   );
 
   // issue access token
-  const accessToken = jwt.sign(
+  const accessToken = jwtUtil.sign(
     { id: user._id, roles: user.roles },
-    config.JWT_SECRET,
     { expiresIn: config.JWT_EXPIRY }
   );
 
@@ -250,9 +249,8 @@ exports.refreshToken = async ({ refreshToken }) => {
   session.revokedAt = null;
   await session.save();
 
-  const accessToken = jwt.sign(
+  const accessToken = jwtUtil.sign(
     { id: session.user, roles: (await User.findById(session.user)).roles },
-    config.JWT_SECRET,
     { expiresIn: config.JWT_EXPIRY }
   );
   return { accessToken, refreshToken: raw };
@@ -280,12 +278,17 @@ exports.revokeAllSessions = async (userId) => {
 /**
  * FORGOT PASSWORD
  */
-exports.forgotPassword = async (email, userContext) => {
-  const user = await User.findOne({ email });
+exports.forgotPassword = async (identifier, userContext) => {
+  // Look up by email or rollNumber
+  const user = await User.findOne({
+    $or: [{ email: identifier }, { rollNumber: identifier }]
+  });
   if (!user) {
     // Always return success to avoid account enumeration
     return;
   }
+  
+  const email = user.email;
 
   // Enforce 24-hour cooldown
   if (user.forgotPasswordRequestedAt &&
@@ -318,6 +321,7 @@ exports.forgotPassword = async (email, userContext) => {
   });
 
   // Send OTP + reset link
+  console.log('📧 Sending password reset OTP:', { email, otp, expiresIn: '10 minutes' });
   await sendMail({
     to: email,
     subject: 'KMIT Clubs Hub Password Reset',
@@ -327,6 +331,7 @@ exports.forgotPassword = async (email, userContext) => {
          Click here to reset your password</a></p>
     `
   });
+  console.log('✅ Password reset OTP email sent successfully to:', email);
 
   // Enqueue notification
   await notificationService.create({
@@ -350,9 +355,34 @@ exports.forgotPassword = async (email, userContext) => {
 /**
  * VERIFY RESET OTP
  */
-exports.verifyResetOtp = async ({ email, otp }, userContext) => {
-  const user = await User.findOne({ email });
-  if (!user) throw Object.assign(new Error('Invalid'), { statusCode: 400 });
+exports.verifyResetOtp = async ({ identifier, otp }, userContext) => {
+  if (!identifier || !otp) {
+    console.error('Missing identifier or otp:', { identifier, otp });
+    throw Object.assign(new Error('Identifier and OTP are required'), { statusCode: 400 });
+  }
+  
+  const user = await User.findOne({
+    $or: [{ email: identifier }, { rollNumber: identifier }]
+  });
+  
+  if (!user) {
+    console.error('User not found for identifier:', identifier);
+    throw Object.assign(new Error('Invalid identifier'), { statusCode: 400 });
+  }
+
+  // Debug: Check what reset records exist for this user
+  const allResets = await PasswordReset.find({ user: user._id }).sort({ createdAt: -1 }).limit(3);
+  console.log('🔍 Debug - All password resets for user:', {
+    userId: user._id,
+    userEmail: user.email,
+    submittedOTP: otp,
+    resets: allResets.map(r => ({
+      otp: r.otp,
+      expiresAt: r.expiresAt,
+      usedAt: r.usedAt,
+      isExpired: r.expiresAt < new Date()
+    }))
+  });
 
   const rec = await PasswordReset.findOne({
     user: user._id,
@@ -360,7 +390,17 @@ exports.verifyResetOtp = async ({ email, otp }, userContext) => {
     expiresAt: { $gt: new Date() },
     usedAt: null
   });
-  if (!rec) throw Object.assign(new Error('Invalid or expired OTP'), { statusCode: 400 });
+  
+  if (!rec) {
+    console.error('❌ No matching password reset found:', {
+      userId: user._id,
+      submittedOTP: otp,
+      now: new Date()
+    });
+    throw Object.assign(new Error('Invalid or expired OTP'), { statusCode: 400 });
+  }
+  
+  console.log('✅ Valid OTP found, verification successful');
 
   // audit
   await auditService.log({
@@ -377,8 +417,10 @@ exports.verifyResetOtp = async ({ email, otp }, userContext) => {
 /**
  * RESET PASSWORD
  */
-exports.resetPassword = async ({ email, otp, newPassword }, userContext) => {
-  const user = await User.findOne({ email });
+exports.resetPassword = async ({ identifier, otp, newPassword }, userContext) => {
+  const user = await User.findOne({
+    $or: [{ email: identifier }, { rollNumber: identifier }]
+  });
   if (!user) throw Object.assign(new Error('Invalid'), { statusCode: 400 });
 
   const rec = await PasswordReset.findOne({

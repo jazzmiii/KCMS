@@ -32,9 +32,9 @@ const LoginPage = () => {
       const user = response.data.user;
 
       // Redirect based on role (priority order)
-      if (user.globalRoles?.includes('admin')) {
+      if (user.roles?.global === 'admin') {
         navigate('/admin/dashboard');
-      } else if (user.globalRoles?.includes('coordinator')) {
+      } else if (user.roles?.global === 'coordinator') {
         navigate('/coordinator/dashboard');
       } else if (user.clubRoles?.some(cr => cr.roles.includes('core') || cr.roles.includes('president'))) {
         navigate('/core/dashboard');

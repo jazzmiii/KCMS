@@ -6,6 +6,15 @@ module.exports = function error(err, req, res, next) {
     return next(err);
   }
 
+  // Handle cases where err is undefined or not an object
+  if (!err) {
+    console.error('Error middleware received undefined error');
+    return res.status(500).json({
+      status: 'error',
+      message: 'Internal Server Error - Unknown error occurred'
+    });
+  }
+
   // Determine status code
   let statusCode = 500;
   let message = 'Internal Server Error';
@@ -42,8 +51,10 @@ module.exports = function error(err, req, res, next) {
   // Log error for debugging (except in test environment)
   if (process.env.NODE_ENV !== 'test') {
     console.error(`[${new Date().toISOString()}] Error:`, {
-      message: err.message,
-      stack: err.stack,
+      message: err.message || 'No error message',
+      stack: err.stack || 'No stack trace',
+      type: typeof err,
+      errorObject: err,
       url: req.url,
       method: req.method,
       statusCode

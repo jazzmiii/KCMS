@@ -87,6 +87,15 @@ exports.revokeSession = async (req, res, next) => {
   }
 };
 
+exports.getMyClubs = async (req, res, next) => {
+  try {
+    const clubs = await userService.getMyClubs(req.user.id, req.query.role);
+    successResponse(res, { clubs });
+  } catch (err) {
+    next(err);
+  }
+};
+
 exports.listUsers = async (req, res, next) => {
   try {
     const { page, limit, ...filters } = req.query;

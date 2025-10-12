@@ -20,6 +20,15 @@ module.exports = {
     guestSpeakers: Joi.array().items(Joi.string()).optional()
   }),
 
+  list: Joi.object({
+    club: objectId.optional(),
+    status: Joi.string().valid('draft','pending','published','ongoing','completed','cancelled').optional(),
+    limit: Joi.number().min(1).max(100).optional(),
+    page: Joi.number().min(1).optional(),
+    startDate: Joi.date().optional(),
+    endDate: Joi.date().optional()
+  }),
+
   eventId: Joi.object({ id: objectId.required() }),
 
   changeStatus: Joi.object({

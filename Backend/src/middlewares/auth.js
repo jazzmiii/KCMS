@@ -1,4 +1,4 @@
-const jwt = require('jsonwebtoken');
+const jwtUtil = require('../utils/jwt');
 const { User } = require('../modules/auth/user.model');
 
 module.exports = async function auth(req, res, next) {
@@ -12,13 +12,13 @@ module.exports = async function auth(req, res, next) {
     const token = parts[1];
     let payload;
     try {
-      payload = jwt.verify(token, require('../config').JWT_SECRET);
+      payload = jwtUtil.verify(token);
     } catch (err) {
       const reason = err.name === 'TokenExpiredError' ? 'expired' : 'invalid';
       return res.status(401).json({ message: 'Unauthorized token', reason });
     }
 
-    const user = await User.findById(payload.sub).lean();
+    const user = await User.findById(payload.id || payload.sub).lean();
     if (!user) return res.status(401).json({ message: 'User not found' });
 
     req.user = {
@@ -30,7 +30,6 @@ module.exports = async function auth(req, res, next) {
       },
       status: user.status,
     };
-
     return next();
   } catch (err) {
     return next(err);

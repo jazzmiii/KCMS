@@ -68,7 +68,7 @@ const EventDetailPage = () => {
   const canManage = user?.clubRoles?.some(cr => 
     cr.clubId === event.clubId?._id && 
     (cr.roles.includes('president') || cr.roles.includes('core'))
-  ) || user?.globalRoles?.includes('admin') || user?.globalRoles?.includes('coordinator');
+  ) || user?.roles?.global === 'admin' || user?.roles?.global === 'coordinator';
 
   const isPublished = event.status === 'published';
 

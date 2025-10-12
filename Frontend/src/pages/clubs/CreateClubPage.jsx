@@ -54,8 +54,8 @@ const CreateClubPage = () => {
       }
 
       const response = await clubService.createClub(formDataToSend);
-      alert('Club created successfully!');
-      navigate(`/clubs/${response.data.club._id}`);
+      alert('Club created successfully! Redirecting to dashboard...');
+      navigate(`/clubs/${response.data.club._id}/dashboard`);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to create club. Please try again.');
     } finally {

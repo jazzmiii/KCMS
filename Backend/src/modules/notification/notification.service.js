@@ -8,6 +8,10 @@ class NotificationService {
    */
   async create({ user, type, payload = {}, priority = 'MEDIUM' }) {
     const notif = await Notification.create({ user, type, payload, priority });
+    if (!notificationQueue || typeof notificationQueue.add !== 'function') {
+      console.error('notificationQueue is not properly initialized:', notificationQueue);
+      throw new Error('Notification queue is not available');
+    }
     await notificationQueue.add('send', { notifId: notif._id });
     return notif;
   }

@@ -1,21 +1,53 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import clubService from '../../services/clubService';
 import '../../styles/HomePage.css';
 
 const HomePage = () => {
   const navigate = useNavigate();
   const [stats, setStats] = useState({
-    activeClubs: 13,
-    events: 25,
+    activeClubs: 0,
+    events: 0,
     students: 1200
   });
+  const [clubs, setClubs] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const clubs = [
+  useEffect(() => {
+    fetchClubs();
+  }, []);
+
+  const fetchClubs = async () => {
+    try {
+      // Fetch PUBLIC data only - no auth required
+      // Filter: active clubs only, limit to 12 for homepage
+      const response = await clubService.listClubs({ 
+        limit: 12, 
+        status: 'active',
+        // Note: No authentication needed for public view
+      });
+      console.log('Fetched PUBLIC clubs:', response.data);
+      setClubs(response.data.clubs || []);
+      setStats(prev => ({
+        ...prev,
+        activeClubs: response.data.total || 0
+      }));
+    } catch (error) {
+      console.error('Error fetching clubs:', error);
+      // Gracefully degrade - show nothing if API fails
+      // Don't expose internal errors to public
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fallback hardcoded clubs in case API fails
+  const fallbackClubs = [
     {
-      id: 1,
+      _id: 1,
       name: 'Organising Committee',
       description: 'Coordinates and manages all club activities and events at KMIT',
-      image: '/src/utils/logos/OC-Logo.jpg',
+      logo: '/src/utils/logos/OC-Logo.jpg',
       category: 'Administrative'
     },
     {
@@ -195,22 +227,36 @@ const HomePage = () => {
           <h2 className="section-title">Our Clubs</h2>
           <p className="section-subtitle">Explore the diverse range of clubs at KMIT</p>
           
-          <div className="clubs-grid-full">
-            {clubs.map((club) => (
-              <div key={club.id} className="club-card">
-                <div className="club-image">
-                  <img src={club.image} alt={club.name} onError={(e) => {
-                    e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="300" height="200"%3E%3Crect fill="%23667eea" width="300" height="200"/%3E%3Ctext fill="%23ffffff" font-family="Arial" font-size="24" x="50%25" y="50%25" text-anchor="middle" dominant-baseline="middle"%3E' + club.name.charAt(0) + '%3C/text%3E%3C/svg%3E';
-                  }} />
-                  <div className="club-category-badge">{club.category}</div>
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '40px' }}>
+              <p>Loading clubs...</p>
+            </div>
+          ) : clubs.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px' }}>
+              <p>No clubs available at the moment. Check back soon!</p>
+            </div>
+          ) : (
+            <div className="clubs-grid-full">
+              {clubs.map((club) => (
+                <div key={club._id || club.id} className="club-card">
+                  <div className="club-image">
+                    <img 
+                      src={club.logo || club.image} 
+                      alt={club.name} 
+                      onError={(e) => {
+                        e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="300" height="200"%3E%3Crect fill="%23667eea" width="300" height="200"/%3E%3Ctext fill="%23ffffff" font-family="Arial" font-size="24" x="50%25" y="50%25" text-anchor="middle" dominant-baseline="middle"%3E' + club.name.charAt(0) + '%3C/text%3E%3C/svg%3E';
+                      }} 
+                    />
+                    <div className="club-category-badge">{club.category}</div>
+                  </div>
+                  <div className="club-info">
+                    <h3 className="club-name">{club.name}</h3>
+                    <p className="club-description">{club.description || 'No description available'}</p>
+                  </div>
                 </div>
-                <div className="club-info">
-                  <h3 className="club-name">{club.name}</h3>
-                  <p className="club-description">{club.description}</p>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
 
           <div className="section-cta">
             <button onClick={() => navigate('/register')} className="btn btn-primary btn-lg">

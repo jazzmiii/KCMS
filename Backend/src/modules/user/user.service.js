@@ -70,6 +70,24 @@ class UserService {
     });
   }
 
+  // Get my clubs
+  async getMyClubs(userId, roleFilter) {
+    const user = await User.findById(userId).populate('roles.scoped.club', 'name category logo');
+    if (!user) throw Object.assign(new Error('User not found'), { statusCode: 404 });
+    
+    let clubs = user.roles?.scoped || [];
+    
+    // Filter by specific club role if requested
+    if (roleFilter) {
+      clubs = clubs.filter(sc => sc.role === roleFilter);
+    }
+    
+    return clubs.map(sc => ({
+      club: sc.club,
+      role: sc.role
+    }));
+  }
+
   // 4) Admin: list users with filters & pagination
   async listUsers(filters, page = 1, limit = 20) {
     const query = {};

@@ -2,6 +2,7 @@ const router       = require('express').Router({ mergeParams: true });
 const authenticate = require('../../middlewares/auth');
 const { permit, requireEither } = require('../../middlewares/permission');
 const validate     = require('../../middlewares/validate');
+const { validateUpload } = require('../../middlewares/fileValidator');
 const multer       = require('multer');
 const upload       = multer({ dest: 'uploads/' });
 const v            = require('./document.validators');
@@ -14,6 +15,7 @@ router.post(
   requireEither(['admin'], ['core', 'president']), // Admin OR Club Core+
   validate(v.clubIdParam, 'params'),
   upload.array('files', 10),
+  validateUpload('image'), // Validate file type, size, and security
   validate(v.uploadSchema),
   ctrl.upload
 );
@@ -69,6 +71,7 @@ router.post(
   authenticate,
   requireEither(['admin'], ['core', 'president']), // Admin OR Club Core+
   upload.array('files', 10),
+  validateUpload('image'), // Validate file type, size, and security
   ctrl.bulkUpload
 );
 

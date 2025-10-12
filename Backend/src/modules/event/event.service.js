@@ -88,7 +88,7 @@ class EventService {
    * Change event status: submit, approve, publish, start, complete.
    */
   async changeStatus(id, action, userContext) {
-    const evt = await Event.findById(id);
+    const evt = await Event.findById(id).populate('club', 'name coordinator');
     if (!evt) {
       const err = new Error('Event not found');
       err.statusCode = 404;
@@ -97,16 +97,66 @@ class EventService {
 
     const prevStatus = evt.status;
     if (action === 'submit' && prevStatus === 'draft') {
+      // Check if budget requires admin approval
+      const requiresAdminApproval = evt.budget > 5000 || 
+                                     (evt.guestSpeakers && evt.guestSpeakers.length > 0);
+      
       evt.status = 'pending_coordinator';
+      evt.requiresAdminApproval = requiresAdminApproval;
+      
       await notificationSvc.create({
-        user: evt.coordinator,
+        user: evt.club.coordinator,
         type: 'approval_required',
-        payload: { eventId: id, title: evt.title },
+        payload: { eventId: id, title: evt.title, budget: evt.budget },
         priority: 'HIGH'
       });
 
     } else if (action === 'approve' && prevStatus === 'pending_coordinator') {
-      // Auto-publish if no further admin needed
+      // Check if admin approval is required
+      const requiresAdminApproval = evt.budget > 5000 || 
+                                     (evt.guestSpeakers && evt.guestSpeakers.length > 0);
+      
+      if (requiresAdminApproval) {
+        // Route to admin for approval
+        evt.status = 'pending_admin';
+        
+        // Notify admin
+        const { User } = require('../auth/user.model');
+        const admins = await User.find({ 'roles.global': 'admin' }).select('_id');
+        
+        await Promise.all(admins.map(admin =>
+          notificationSvc.create({
+            user: admin._id,
+            type: 'approval_required',
+            payload: { 
+              eventId: id, 
+              title: evt.title, 
+              budget: evt.budget,
+              reason: evt.budget > 5000 ? 'Budget exceeds ₹5000' : 'External guest speakers'
+            },
+            priority: 'HIGH'
+          })
+        ));
+      } else {
+        // Auto-publish if no admin approval needed
+        evt.status = 'approved';
+        evt.status = 'published';
+        
+        // Notify all members
+        const members = await Membership.find({ club: evt.club._id, status: 'approved' })
+          .distinct('user');
+        await Promise.all(members.map(u =>
+          notificationSvc.create({
+            user: u,
+            type: 'event_reminder',
+            payload: { eventId: id, dateTime: evt.dateTime },
+            priority: 'MEDIUM'
+          })
+        ));
+      }
+
+    } else if (action === 'approveAdmin' && prevStatus === 'pending_admin') {
+      // Admin approval for high-budget or special events
       evt.status = 'approved';
       evt.status = 'published';
 
@@ -146,6 +196,8 @@ class EventService {
 
     } else if (action === 'complete') {
       evt.status = 'completed';
+      // Set report due date to 7 days from completion
+      evt.reportDueDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
     } else {
       const err = new Error('Invalid action/state');

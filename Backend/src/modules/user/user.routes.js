@@ -3,6 +3,7 @@ const router = require('express').Router();
 const authenticate = require('../../middlewares/auth');
 const { permit }   = require('../../middlewares/permission');
 const validate     = require('../../middlewares/validate');
+const { validateUpload } = require('../../middlewares/fileValidator');
 const v            = require('./user.validators');
 const ctrl         = require('./user.controller');
 const multer       = require('multer');
@@ -36,6 +37,7 @@ router.post(
   '/me/photo',
   authenticate,
   upload.single('photo'),
+  validateUpload('image'), // Validate file type, size, and security
   validate(v.photoUploadParams),
   ctrl.uploadPhoto
 );
@@ -61,6 +63,13 @@ router.delete(
   authenticate,
   validate(v.sessionIdParam, 'params'),
   ctrl.revokeSession
+);
+
+// Get my clubs
+router.get(
+  '/me/clubs',
+  authenticate,
+  ctrl.getMyClubs
 );
 
 // ADMIN-only
