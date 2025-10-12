@@ -1,0 +1,30 @@
+/* Users Management Page Styles */
+.users-management-page {
+  width: 100%;
+}
+
+.role-select {
+  padding: 0.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  background-color: white;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.role-select:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+.role-select:hover {
+  border-color: var(--primary-color);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .role-select {
+    width: 100%;
+  }
+}
