@@ -25,10 +25,20 @@ const ClubDashboard = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const [userRole, setUserRole] = useState(null);
   const [canManage, setCanManage] = useState(false);
+  const [members, setMembers] = useState([]);
+  const [showAddMemberModal, setShowAddMemberModal] = useState(false);
+  const [selectedMember, setSelectedMember] = useState(null);
+  const [showEditRoleModal, setShowEditRoleModal] = useState(false);
 
   useEffect(() => {
     fetchClubDashboardData();
   }, [clubId]);
+
+  useEffect(() => {
+    if (activeTab === 'members' && clubId) {
+      fetchMembers();
+    }
+  }, [activeTab, clubId]);
 
   const fetchClubDashboardData = async () => {
     try {
@@ -90,6 +100,53 @@ const ClubDashboard = () => {
     }
   };
 
+  const fetchMembers = async () => {
+    try {
+      console.log('Fetching members for club:', clubId);
+      const response = await clubService.getMembers(clubId);
+      console.log('Members response:', response);
+      console.log('Members data:', response.data);
+      
+      // Backend returns: {data: {members: {total, page, limit, members: []}}}
+      const membersData = response.data?.members;
+      console.log('Extracted members data:', membersData);
+      
+      // Extract the actual array
+      if (membersData && membersData.members && Array.isArray(membersData.members)) {
+        console.log('Setting members array:', membersData.members);
+        setMembers(membersData.members);
+      } else if (Array.isArray(membersData)) {
+        console.log('Members data is already an array:', membersData);
+        setMembers(membersData);
+      } else {
+        console.warn('Unexpected members data format, setting empty array');
+        setMembers([]);
+      }
+    } catch (error) {
+      console.error('Error fetching members:', error);
+      console.error('Error details:', error.response?.data);
+      setMembers([]);
+    }
+  };
+
+  const handleRemoveMember = async (memberId) => {
+    if (!window.confirm('Are you sure you want to remove this member?')) return;
+    
+    try {
+      await clubService.removeMember(clubId, memberId);
+      alert('Member removed successfully');
+      fetchMembers();
+      fetchClubDashboardData(); // Refresh stats
+    } catch (error) {
+      alert(error.response?.data?.message || 'Failed to remove member');
+    }
+  };
+
+  const handleEditRole = (member) => {
+    setSelectedMember(member);
+    setShowEditRoleModal(true);
+  };
+
   if (loading) {
     return (
       <Layout>
@@ -113,6 +170,7 @@ const ClubDashboard = () => {
   }
 
   if (!canManage) {
+    console.log('Access denied - canManage:', canManage, 'user:', user);
     return (
       <Layout>
         <div className="error-container">
@@ -123,6 +181,8 @@ const ClubDashboard = () => {
       </Layout>
     );
   }
+
+  console.log('Rendering dashboard - activeTab:', activeTab, 'members:', members);
 
   return (
     <Layout>
@@ -419,12 +479,57 @@ const ClubDashboard = () => {
           {activeTab === 'members' && (
             <div className="members-section">
               <div className="section-header">
-                <h2>Club Members</h2>
-                <button className="btn btn-primary">+ Add Member</button>
+                <h2>Club Members ({members?.length || 0})</h2>
+                {canManage && (
+                  <button 
+                    className="btn btn-primary" 
+                    onClick={() => setShowAddMemberModal(true)}
+                  >
+                    + Add Member
+                  </button>
+                )}
               </div>
-              <div className="info-card">
-                <p>Total Members: {stats.totalMembers}</p>
-                <p className="text-muted">Member management feature coming soon...</p>
+              
+              <div className="members-grid">
+                {!members || members.length === 0 ? (
+                  <div className="info-card">
+                    <p className="text-muted">No members found. Add members to get started.</p>
+                  </div>
+                ) : (
+                  members.map((member) => member && member._id ? (
+                    <div key={member._id} className="member-card">
+                      <div className="member-avatar">
+                        {member.user?.profile?.name?.charAt(0) || member.user?.email?.charAt(0) || 'U'}
+                      </div>
+                      <div className="member-info">
+                        <h4>{member.user?.profile?.name || member.user?.email || 'Unknown'}</h4>
+                        <p className="member-email">{member.user?.email || ''}</p>
+                        <span className={`badge badge-${member.role === 'president' ? 'primary' : 'secondary'}`}>
+                          {member.role || 'member'}
+                        </span>
+                        <span className={`badge badge-${member.status === 'approved' ? 'success' : 'warning'}`}>
+                          {member.status || 'pending'}
+                        </span>
+                      </div>
+                      {canManage && (
+                        <div className="member-actions">
+                          <button 
+                            className="btn btn-sm btn-secondary"
+                            onClick={() => handleEditRole(member)}
+                          >
+                            Edit Role
+                          </button>
+                          <button 
+                            className="btn btn-sm btn-danger"
+                            onClick={() => handleRemoveMember(member._id)}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ) : null)
+                )}
               </div>
             </div>
           )}
@@ -450,7 +555,248 @@ const ClubDashboard = () => {
           )}
         </div>
       </div>
+
+      {/* Add Member Modal */}
+      {showAddMemberModal && (
+        <AddMemberModal
+          clubId={clubId}
+          onClose={() => setShowAddMemberModal(false)}
+          onSuccess={() => {
+            fetchMembers();
+            fetchClubDashboardData();
+            setShowAddMemberModal(false);
+          }}
+        />
+      )}
+
+      {/* Edit Role Modal */}
+      {showEditRoleModal && selectedMember && (
+        <EditRoleModal
+          clubId={clubId}
+          member={selectedMember}
+          onClose={() => {
+            setShowEditRoleModal(false);
+            setSelectedMember(null);
+          }}
+          onSuccess={() => {
+            fetchMembers();
+            setShowEditRoleModal(false);
+            setSelectedMember(null);
+          }}
+        />
+      )}
     </Layout>
+  );
+};
+
+// Add Member Modal Component
+const AddMemberModal = ({ clubId, onClose, onSuccess }) => {
+  const [userId, setUserId] = useState('');
+  const [role, setRole] = useState('member');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [users, setUsers] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  const fetchUsers = async () => {
+    try {
+      const response = await userService.list({ limit: 100 });
+      setUsers(response.data.users || []);
+    } catch (err) {
+      console.error('Error fetching users:', err);
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    try {
+      await clubService.addMember(clubId, { userId, role });
+      alert('Member added successfully!');
+      onSuccess();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to add member');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredUsers = users.filter(u => {
+    if (!searchTerm) return true; // Show all if no search term
+    
+    const searchLower = searchTerm.toLowerCase();
+    const rollNumber = u.profile?.rollNumber?.toLowerCase() || '';
+    const email = u.email?.toLowerCase() || '';
+    const name = u.profile?.name?.toLowerCase() || '';
+    
+    const matches = rollNumber.includes(searchLower) || 
+                    email.includes(searchLower) ||
+                    name.includes(searchLower);
+    
+    if (matches) {
+      console.log('Match found:', { rollNumber, email, name, searchTerm });
+    }
+    
+    return matches;
+  });
+  
+  console.log('Search term:', searchTerm);
+  console.log('Total users:', users.length);
+  console.log('Filtered users:', filteredUsers.length);
+
+  const roles = ['member', 'core', 'president', 'vicePresident', 'secretary', 'treasurer', 'leadPR', 'leadTech'];
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>Add Member</h2>
+          <button className="btn-close" onClick={onClose}>×</button>
+        </div>
+
+        {error && <div className="alert alert-error">{error}</div>}
+
+        <form onSubmit={handleSubmit} className="form">
+          <div className="form-group">
+            <label>Search User *</label>
+            <input
+              type="text"
+              placeholder="Search by roll number or email..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+
+          <div className="form-group">
+            <label>Select User *</label>
+            <select
+              value={userId}
+              onChange={(e) => setUserId(e.target.value)}
+              required
+            >
+              <option value="">-- Select a user --</option>
+              {filteredUsers.length === 0 ? (
+                <option value="" disabled>No users found - try different search term</option>
+              ) : (
+                filteredUsers.map(u => (
+                  <option key={u._id} value={u._id}>
+                    {u.profile?.rollNumber ? `${u.profile.rollNumber} - ` : ''}
+                    {u.profile?.name ? `${u.profile.name} - ` : ''}
+                    {u.email}
+                  </option>
+                ))
+              )}
+            </select>
+            <small className="form-hint">
+              {searchTerm ? `${filteredUsers.length} user(s) found` : `${users.length} total users`}
+            </small>
+          </div>
+
+          <div className="form-group">
+            <label>Role *</label>
+            <select
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+              required
+            >
+              {roles.map(r => (
+                <option key={r} value={r}>
+                  {r.charAt(0).toUpperCase() + r.slice(1)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="modal-actions">
+            <button type="button" className="btn btn-secondary" onClick={onClose}>
+              Cancel
+            </button>
+            <button type="submit" className="btn btn-primary" disabled={loading}>
+              {loading ? 'Adding...' : 'Add Member'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+// Edit Role Modal Component
+const EditRoleModal = ({ clubId, member, onClose, onSuccess }) => {
+  const [role, setRole] = useState(member.role);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const roles = ['member', 'core', 'president', 'vicePresident', 'secretary', 'treasurer', 'leadPR', 'leadTech'];
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    try {
+      await clubService.updateMemberRole(clubId, member._id, { role });
+      alert('Role updated successfully!');
+      onSuccess();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to update role');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>Edit Member Role</h2>
+          <button className="btn-close" onClick={onClose}>×</button>
+        </div>
+
+        {error && <div className="alert alert-error">{error}</div>}
+
+        <form onSubmit={handleSubmit} className="form">
+          <div className="form-group">
+            <label>Member</label>
+            <input
+              type="text"
+              value={member.user?.profile?.name || 'Unknown'}
+              disabled
+            />
+          </div>
+
+          <div className="form-group">
+            <label>New Role *</label>
+            <select
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+              required
+            >
+              {roles.map(r => (
+                <option key={r} value={r}>
+                  {r.charAt(0).toUpperCase() + r.slice(1)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="modal-actions">
+            <button type="button" className="btn btn-secondary" onClick={onClose}>
+              Cancel
+            </button>
+            <button type="submit" className="btn btn-primary" disabled={loading}>
+              {loading ? 'Updating...' : 'Update Role'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 };
 

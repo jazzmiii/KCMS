@@ -22,6 +22,7 @@ import ClubsPage from './pages/clubs/ClubsPage';
 import ClubDetailPage from './pages/clubs/ClubDetailPage';
 import ClubDashboard from './pages/clubs/ClubDashboard';
 import CreateClubPage from './pages/clubs/CreateClubPage';
+import EditClubPage from './pages/clubs/EditClubPage';
 
 // Recruitment Pages
 import RecruitmentsPage from './pages/recruitments/RecruitmentsPage';
@@ -37,9 +38,14 @@ import CreateEventPage from './pages/events/CreateEventPage';
 // User Pages
 import ProfilePage from './pages/user/ProfilePage';
 import UsersManagementPage from './pages/user/UsersManagementPage';
+import SessionsPage from './pages/user/SessionsPage';
+import NotificationPreferencesPage from './pages/user/NotificationPreferencesPage';
 
 // Notification Pages
 import NotificationsPage from './pages/notifications/NotificationsPage';
+
+// Admin Pages
+import MaintenanceModePage from './pages/admin/MaintenanceModePage';
 
 // Reports Pages
 import ReportsPage from './pages/reports/ReportsPage';
@@ -135,6 +141,14 @@ function App() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/clubs/:clubId/edit"
+            element={
+              <ProtectedRoute>
+                <EditClubPage />
+              </ProtectedRoute>
+            }
+          />
 
           {/* Recruitment Routes */}
           <Route
@@ -206,10 +220,34 @@ function App() {
             }
           />
           <Route
+            path="/profile/sessions"
+            element={
+              <ProtectedRoute>
+                <SessionsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/profile/preferences"
+            element={
+              <ProtectedRoute>
+                <NotificationPreferencesPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/admin/users"
             element={
               <ProtectedRoute requiredRole="admin">
                 <UsersManagementPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/system"
+            element={
+              <ProtectedRoute requiredRole="admin">
+                <MaintenanceModePage />
               </ProtectedRoute>
             }
           />

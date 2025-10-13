@@ -4,6 +4,7 @@ const authenticate = require('../../middlewares/auth');
 const { requireAdmin } = require('../../middlewares/permission');
 const validate = require('../../middlewares/validate');
 const Joi = require('joi');
+const redis = require('../../config/redis');
 const {
   enableMaintenanceMode,
   disableMaintenanceMode,
@@ -198,5 +199,27 @@ router.post(
     }
   }
 );
+
+/**
+ * Clear Redis cache (useful for debugging)
+ * POST /api/admin/cache/clear
+ */
+router.post('/cache/clear', authenticate, requireAdmin(), async (req, res, next) => {
+  try {
+    const keys = await redis.keys('clubs:list:*');
+    
+    if (keys.length > 0) {
+      await redis.del(...keys);
+    }
+    
+    res.json({
+      status: 'success',
+      message: `Cleared ${keys.length} cache entries`,
+      data: { clearedKeys: keys.length }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
 
 module.exports = router;

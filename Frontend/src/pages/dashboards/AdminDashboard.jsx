@@ -192,11 +192,14 @@ const AdminDashboard = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {recentEvents.map((event) => (
+                  {recentEvents.map((event) => {
+                    const eventDate = new Date(event.dateTime || event.date);
+                    const isValidDate = !isNaN(eventDate.getTime());
+                    return (
                     <tr key={event._id}>
-                      <td>{event.name}</td>
-                      <td>{new Date(event.date).toLocaleDateString()}</td>
-                      <td>{event.venue}</td>
+                      <td>{event.title || event.name}</td>
+                      <td>{isValidDate ? eventDate.toLocaleDateString() : 'Date TBA'}</td>
+                      <td>{event.venue || 'TBA'}</td>
                       <td>
                         <span className={`badge badge-${
                           event.status === 'published' ? 'success' : 
@@ -211,7 +214,8 @@ const AdminDashboard = () => {
                         </Link>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

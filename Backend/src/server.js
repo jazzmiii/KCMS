@@ -4,7 +4,7 @@ const mongoose = require('mongoose');
 const app = require('./app');
 const redis = require('./config/redis');
 const { startSchedulers } = require('./workers/bootstrap');
-const { scheduleBatching } = require('./workers/notification.batcher');
+const { startNotificationBatcher } = require('./workers/notification.batcher');
 const { startRecruitmentScheduler } = require('./workers/recruitment.scheduler');
 const { verifyTransport } = require('./utils/mail');
 
@@ -42,8 +42,8 @@ async function start() {
 
   if (config.START_NOTIFICATION_BATCH) {
     try {
-      const every = await scheduleBatching();
-      console.log(`Notification batching scheduled every ${every}ms`);
+      startNotificationBatcher();
+      console.log('📬 Notification Batching: Running');
     } catch (e) {
       console.error('Failed to schedule notification batching:', e);
     }
@@ -53,7 +53,6 @@ async function start() {
   if (config.START_SCHEDULERS) {
     try {
       startRecruitmentScheduler(60000); // Check every minute
-      console.log('Recruitment lifecycle scheduler started');
     } catch (e) {
       console.error('Failed to start recruitment scheduler:', e);
     }

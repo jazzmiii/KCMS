@@ -55,6 +55,34 @@ const userService = {
     const response = await api.delete(`/users/${id}`);
     return response.data;
   },
+
+  // Upload Profile Photo
+  uploadPhoto: async (file) => {
+    const formData = new FormData();
+    formData.append('photo', file);
+    const response = await api.post('/users/me/photo', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+    return response.data;
+  },
+
+  // Update Notification Preferences
+  updatePreferences: async (preferences) => {
+    const response = await api.patch('/users/me/preferences', preferences);
+    return response.data;
+  },
+
+  // List Active Sessions
+  listSessions: async () => {
+    const response = await api.get('/users/me/sessions');
+    return response.data;
+  },
+
+  // Revoke Session
+  revokeSession: async (sessionId) => {
+    const response = await api.delete(`/users/me/sessions/${sessionId}`);
+    return response.data;
+  },
 };
 
 export default userService;

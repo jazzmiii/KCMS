@@ -38,7 +38,12 @@ exports.updateSettings = async (req, res, next) => {
     const club = await clubService.updateSettings(
       req.params.clubId,
       req.body,
-      { id: req.user.id, ip: req.ip, userAgent: req.headers['user-agent'] }
+      { 
+        id: req.user.id, 
+        role: req.user.roles?.global, 
+        ip: req.ip, 
+        userAgent: req.headers['user-agent'] 
+      }
     );
     successResponse(res, { club }, 'Settings updated or pending approval');
   } catch (err) { next(err); }

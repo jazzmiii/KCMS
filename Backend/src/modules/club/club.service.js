@@ -34,8 +34,8 @@ class ClubService {
       logoUrl = res.secure_url;
     }
 
-    // Create club document
-    const club = await Club.create({ ...data, logoUrl, status: 'draft' });
+    // Create club document - Admin creates directly as active
+    const club = await Club.create({ ...data, logoUrl, status: 'active' });
 
     // Add core members
     if (Array.isArray(data.coreMembers)) {
@@ -55,11 +55,11 @@ class ClubService {
       { upsert: true }
     );
 
-    // Notify coordinator for approval
+    // Notify coordinator and president about club creation
     await notificationService.create({
       user: data.coordinator,
-      type: 'approval_required',
-      payload: { clubId: club._id, name: club.name },
+      type: 'role_assigned',
+      payload: { clubId: club._id, name: club.name, role: 'coordinator' },
       priority: 'HIGH'
     });
 
@@ -78,14 +78,15 @@ class ClubService {
   }
 
   // List active clubs (with Redis caching)
-  async listClubs({ category, search, page = 1, limit = 20 }) {
-    const key = `${CLUB_LIST_CACHE}:${category||'all'}:${search||''}:${page}:${limit}`;
+  async listClubs({ category, search, coordinator, page = 1, limit = 20 }) {
+    const key = `${CLUB_LIST_CACHE}:${category||'all'}:${search||''}:${coordinator||''}:${page}:${limit}`;
     const cached = await redis.get(key);
     if (cached) return JSON.parse(cached);
 
     const query = { status: 'active' };
     if (category) query.category = category;
     if (search) query.name = new RegExp(search, 'i');
+    if (coordinator) query.coordinator = coordinator; // Filter by assigned coordinator
 
     const skip = (page - 1) * limit;
     const [total, clubs] = await Promise.all([
@@ -126,11 +127,22 @@ class ClubService {
   /**
    * Update club settings.
    * Public fields apply immediately.
-   * Protected (name, category, coreMembers) require approval.
+   * Protected (name, category, coreMembers) require approval UNLESS user is admin.
+   * Admin changes are always immediate.
    */
   async updateSettings(clubId, updates, userContext) {
     const club = await Club.findById(clubId);
     if (!club) throw Object.assign(new Error('Club not found'), { statusCode: 404 });
+
+    // Check if user is admin
+    const isAdmin = userContext.role === 'admin';
+    console.log('🔍 updateSettings Debug:', {
+      userId: userContext.id,
+      role: userContext.role,
+      isAdmin: isAdmin,
+      clubName: club.name,
+      updates: updates
+    });
 
     // Separate fields
     const publicFields    = ['description','vision','mission','socialLinks','bannerUrl'];
@@ -160,28 +172,52 @@ class ClubService {
       });
     }
 
-    // Store protected under pendingSettings
+    // Handle protected fields
     if (Object.keys(prot).length) {
-      club.pendingSettings = { ...club.pendingSettings, ...prot };
-      club.status = 'pending_approval';
+      if (isAdmin) {
+        // Admin: Apply protected changes immediately
+        Object.assign(club, prot);
+        
+        // Clear any existing pending settings
+        club.pendingSettings = undefined;
+        
+        // Keep status as active
+        if (club.status === 'pending_approval') {
+          club.status = 'active';
+        }
 
-      // Notify coordinator for approval
-      await notificationService.create({
-        user: club.coordinator,
-        type: 'approval_required',
-        payload: { clubId, pending: Object.keys(prot) },
-        priority: 'HIGH'
-      });
+        // Audit admin direct update
+        await auditService.log({
+          user: userContext.id,
+          action: 'CLUB_ADMIN_UPDATE',
+          target: `Club:${clubId}`,
+          newValue: prot,
+          ip: userContext.ip,
+          userAgent: userContext.userAgent
+        });
+      } else {
+        // President: Store protected under pendingSettings for approval
+        club.pendingSettings = { ...club.pendingSettings, ...prot };
+        club.status = 'pending_approval';
 
-      // Audit protected request
-      await auditService.log({
-        user: userContext.id,
-        action: 'CLUB_PROTECTED_UPDATE_REQUEST',
-        target: `Club:${clubId}`,
-        newValue: prot,
-        ip: userContext.ip,
-        userAgent: userContext.userAgent
-      });
+        // Notify coordinator for approval
+        await notificationService.create({
+          user: club.coordinator,
+          type: 'approval_required',
+          payload: { clubId, pending: Object.keys(prot) },
+          priority: 'HIGH'
+        });
+
+        // Audit protected request
+        await auditService.log({
+          user: userContext.id,
+          action: 'CLUB_PROTECTED_UPDATE_REQUEST',
+          target: `Club:${clubId}`,
+          newValue: prot,
+          ip: userContext.ip,
+          userAgent: userContext.userAgent
+        });
+      }
     }
 
     await club.save();
@@ -233,51 +269,14 @@ class ClubService {
     return club;
   }
 
-  // Submit or approve club for activation
+  // DEPRECATED: Club approval no longer needed
+  // Admin creates clubs directly as 'active' (no approval workflow)
+  // Only settings changes require approval (see approveSettings above)
   async approveClub(clubId, action, userContext) {
-    const club = await Club.findById(clubId);
-    if (!club) throw Object.assign(new Error('Not found'), { statusCode: 404 });
-    const prevStatus = club.status;
-
-    if (action === 'submit' && club.status === 'draft') {
-      club.status = 'pending_approval';
-      await notificationService.create({
-        user: club.coordinator,
-        type: 'approval_required',
-        payload: { clubId, name: club.name },
-        priority: 'HIGH'
-      });
-    }
-    else if (action === 'approve' && club.status === 'pending_approval') {
-      club.status = 'active';
-      // Notify president & members
-      const members = await Membership.find({ club: clubId, status: 'approved' })
-        .distinct('user');
-      await Promise.all(members.map(u =>
-        notificationService.create({
-          user: u,
-          type: 'role_assigned',          // or 'club_activated'
-          payload: { clubId },
-          priority: 'MEDIUM'
-        })
-      ));
-    }
-    else {
-      throw Object.assign(new Error('Invalid action or state'), { statusCode: 400 });
-    }
-
-    await club.save();
-    await auditService.log({
-      user: userContext.id,
-      action: `CLUB_${action.toUpperCase()}`,
-      target: `Club:${clubId}`,
-      oldValue: { status: prevStatus },
-      newValue: { status: club.status },
-      ip: userContext.ip,
-      userAgent: userContext.userAgent
-    });
-    await this.flushCache();
-    return club;
+    throw Object.assign(
+      new Error('Club approval is deprecated. Clubs are created directly as active by admin.'), 
+      { statusCode: 400 }
+    );
   }
 
   // Archive (soft-delete) a club

@@ -101,9 +101,14 @@ const ClubDetailPage = () => {
 
               <div className="club-actions">
                 {canManage && (
-                  <Link to={`/clubs/${clubId}/edit`} className="btn btn-primary">
-                    Edit Club
-                  </Link>
+                  <>
+                    <Link to={`/clubs/${clubId}/dashboard`} className="btn btn-primary">
+                      📊 Dashboard
+                    </Link>
+                    <Link to={`/clubs/${clubId}/edit`} className="btn btn-secondary">
+                      ✏️ Edit Club
+                    </Link>
+                  </>
                 )}
                 <Link to="/recruitments" className="btn btn-outline">
                   View Recruitments
@@ -216,11 +221,16 @@ const ClubDetailPage = () => {
             <div className="members-section">
               <div className="info-card">
                 <h3>Club Members</h3>
-                <p>Member list is only visible to club members and coordinators.</p>
-                {canManage && (
-                  <div className="member-stats">
-                    <p>Total Members: {club.memberCount || 0}</p>
+                <p>Total Members: {club.memberCount || 0}</p>
+                {canManage ? (
+                  <div className="member-management-hint">
+                    <p>To view and manage club members, go to the Dashboard.</p>
+                    <Link to={`/clubs/${clubId}/dashboard`} className="btn btn-primary" style={{ marginTop: '1rem' }}>
+                      📊 Go to Dashboard
+                    </Link>
                   </div>
+                ) : (
+                  <p className="text-muted">Member list is only visible to club members and coordinators.</p>
                 )}
               </div>
             </div>

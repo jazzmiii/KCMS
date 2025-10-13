@@ -97,13 +97,17 @@ const EventsPage = () => {
           </div>
         ) : events.length > 0 ? (
           <div className="events-grid">
-            {events.map((event) => (
+            {events.map((event) => {
+              const eventDate = new Date(event.dateTime || event.date);
+              const isValidDate = !isNaN(eventDate.getTime());
+              
+              return (
               <div key={event._id} className="event-card">
                 <div className="event-card-header">
                   <div className="event-date-badge">
-                    <span className="day">{new Date(event.date).getDate()}</span>
+                    <span className="day">{isValidDate ? eventDate.getDate() : '--'}</span>
                     <span className="month">
-                      {new Date(event.date).toLocaleString('default', { month: 'short' })}
+                      {isValidDate ? eventDate.toLocaleString('default', { month: 'short' }) : '---'}
                     </span>
                   </div>
                   <span className={`badge ${getStatusBadgeClass(event.status)}`}>
@@ -112,27 +116,27 @@ const EventsPage = () => {
                 </div>
 
                 <div className="event-card-body">
-                  <h3>{event.name}</h3>
-                  <p className="event-club">{event.clubId?.name || 'Unknown Club'}</p>
+                  <h3>{event.title || event.name}</h3>
+                  <p className="event-club">{event.club?.name || 'Unknown Club'}</p>
                   <p className="event-description">{event.description}</p>
 
                   <div className="event-meta">
                     <div className="meta-item">
                       <span className="meta-icon">📍</span>
-                      <span>{event.venue}</span>
+                      <span>{event.venue || 'TBA'}</span>
                     </div>
                     <div className="meta-item">
                       <span className="meta-icon">🕐</span>
                       <span>
-                        {new Date(event.date).toLocaleTimeString('en-US', { 
+                        {isValidDate ? eventDate.toLocaleTimeString('en-US', { 
                           hour: '2-digit', 
                           minute: '2-digit' 
-                        })}
+                        }) : 'Time TBA'}
                       </span>
                     </div>
                     <div className="meta-item">
                       <span className="meta-icon">👥</span>
-                      <span>{event.expectedAttendees || 0} expected</span>
+                      <span>{event.expectedAttendees || event.capacity || 0} expected</span>
                     </div>
                   </div>
                 </div>
@@ -143,7 +147,8 @@ const EventsPage = () => {
                   </Link>
                 </div>
               </div>
-            ))}
+            );
+            })}
           </div>
         ) : (
           <div className="no-results">

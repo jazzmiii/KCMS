@@ -1,7 +1,14 @@
 //src/modules/club/club.routes.js
 const router       = require('express').Router();
 const authenticate = require('../../middlewares/auth');
-const { permit, requireAdmin, requireClubRole, requireEither } = require('../../middlewares/permission');
+const { 
+  permit, 
+  requireAdmin, 
+  requireClubRole, 
+  requireEither, 
+  requireAssignedCoordinator,
+  requireAdminOrCoordinatorOrClubRole 
+} = require('../../middlewares/permission');
 const validate     = require('../../middlewares/validate');
 const { validateUpload } = require('../../middlewares/fileValidator');
 const multer       = require('multer');
@@ -45,25 +52,18 @@ router.patch(
   ctrl.updateSettings
 );
 
-// Approve protected settings (Coordinator only - Section 3.3)
+// Approve protected settings (Assigned Coordinator only - Section 3.3)
 router.post(
   '/:clubId/settings/approve',
   authenticate,
-  permit({ global: ['admin', 'coordinator'] }), // Admin OR Coordinator
+  requireAssignedCoordinator(), // Admin OR Assigned Coordinator only
   validate(v.clubId, 'params'),
   validate(v.approveSettingsSchema),
   ctrl.approveSettings
 );
 
-// Approval Workflow (Coordinator approves club creation - Section 3.1)
-router.patch(
-  '/:clubId/approve',
-  authenticate,
-  permit({ global: ['admin', 'coordinator'] }), // Admin OR Coordinator
-  validate(v.clubId, 'params'),
-  validate(v.approveClubSchema),
-  ctrl.approveClub
-);
+// NOTE: Club approval route removed - Admin creates clubs directly as 'active'
+// Only settings changes require coordinator approval (see /settings/approve above)
 
 // Archive Club (Admin OR Club President - Section 3.3)
 router.delete(
@@ -78,7 +78,7 @@ router.delete(
 router.get(
   '/:clubId/members',
   authenticate,
-  requireEither(['admin', 'coordinator'], ['member', 'core', 'president']), // Admin/Coordinator OR Club Members
+  requireAdminOrCoordinatorOrClubRole(['member', 'core', 'president']), // Admin OR Assigned Coordinator OR Club Members
   validate(v.clubId, 'params'),
   validate(v.getMembersSchema, 'query'),
   ctrl.getMembers
@@ -119,7 +119,7 @@ router.delete(
 router.get(
   '/:clubId/analytics',
   authenticate,
-  requireEither(['admin', 'coordinator'], ['core', 'president']), // Admin/Coordinator OR Club Core+
+  requireAdminOrCoordinatorOrClubRole(['core', 'president']), // Admin OR Assigned Coordinator OR Club Core+
   validate(v.clubId, 'params'),
   validate(v.analyticsSchema, 'query'),
   ctrl.getAnalytics

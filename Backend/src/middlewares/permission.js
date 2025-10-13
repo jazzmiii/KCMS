@@ -113,12 +113,22 @@ exports.requireScoped = (allowed = [], clubParam = 'clubId') => {
  * @param {string} clubParam - Parameter name for clubId
  */
 exports.requireEither = (globalRoles = [], scopedRoles = [], clubParam = 'clubId') => {
-  return exports.permit({ 
-    global: globalRoles, 
-    scoped: scopedRoles, 
-    clubParam,
-    allowGlobalOverride: true 
-  });
+  return (req, res, next) => {
+    console.log('🔍 requireEither Debug:', {
+      userId: req.user?.id,
+      userRole: req.user?.roles?.global,
+      requiredGlobal: globalRoles,
+      requiredScoped: scopedRoles,
+      clubId: req.params[clubParam]
+    });
+    
+    return exports.permit({ 
+      global: globalRoles, 
+      scoped: scopedRoles, 
+      clubParam,
+      allowGlobalOverride: true 
+    })(req, res, next);
+  };
 };
 
 /**
@@ -142,4 +152,101 @@ exports.requireAdmin = () => {
  */
 exports.requireCoordinatorOrAdmin = () => {
   return exports.requireGlobal(['coordinator', 'admin']);
+};
+
+/**
+ * Check if coordinator is accessing their assigned club only
+ * Admins have full access to all clubs
+ * @param {string} clubParam - Parameter name for clubId
+ */
+exports.requireAssignedCoordinator = (clubParam = 'clubId') => {
+  return async (req, res, next) => {
+    if (!req.user) {
+      return errorResponse(res, 401, 'Authentication required');
+    }
+
+    // Admins have full access
+    if (req.user.roles?.global === 'admin') {
+      return next();
+    }
+
+    // Check if user is a coordinator
+    if (req.user.roles?.global !== 'coordinator') {
+      return errorResponse(res, 403, 'Coordinator or Admin access required');
+    }
+
+    // Get clubId from params/body/query
+    const clubId = req.params[clubParam] || req.body[clubParam] || req.query[clubParam];
+    
+    if (!clubId) {
+      return errorResponse(res, 400, `${clubParam} is required`);
+    }
+
+    // Check if this coordinator is assigned to this club
+    const { Club } = require('../modules/club/club.model');
+    try {
+      const club = await Club.findById(clubId);
+      
+      if (!club) {
+        return errorResponse(res, 404, 'Club not found');
+      }
+
+      // Check if coordinator matches
+      if (club.coordinator.toString() !== req.user.id.toString()) {
+        return errorResponse(res, 403, 'Access denied: You are not assigned to this club');
+      }
+
+      next();
+    } catch (error) {
+      console.error('Coordinator check error:', error);
+      return errorResponse(res, 500, 'Error checking coordinator access');
+    }
+  };
+};
+
+/**
+ * Allows Admin, OR assigned coordinator, OR club members with specific roles
+ * @param {string[]} clubRoles - Required club roles (e.g., ['member', 'core'])
+ * @param {string} clubParam - Parameter name for clubId
+ */
+exports.requireAdminOrCoordinatorOrClubRole = (clubRoles = [], clubParam = 'clubId') => {
+  return async (req, res, next) => {
+    if (!req.user) {
+      return errorResponse(res, 401, 'Authentication required');
+    }
+
+    // Admin has full access
+    if (req.user.roles?.global === 'admin') {
+      return next();
+    }
+
+    const clubId = req.params[clubParam] || req.body[clubParam] || req.query[clubParam];
+    
+    if (!clubId) {
+      return errorResponse(res, 400, `${clubParam} is required`);
+    }
+
+    // Check if assigned coordinator
+    if (req.user.roles?.global === 'coordinator') {
+      const { Club } = require('../modules/club/club.model');
+      try {
+        const club = await Club.findById(clubId);
+        if (club && club.coordinator.toString() === req.user.id.toString()) {
+          return next(); // Assigned coordinator - allow access
+        }
+      } catch (error) {
+        console.error('Coordinator check error:', error);
+      }
+    }
+
+    // Check club roles
+    if (clubRoles.length > 0) {
+      const hasClubRole = checkScopedRole(req.user, clubId, clubRoles);
+      if (hasClubRole) {
+        return next();
+      }
+    }
+
+    return errorResponse(res, 403, 'Access denied: Insufficient permissions');
+  };
 };

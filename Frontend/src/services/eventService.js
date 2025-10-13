@@ -56,6 +56,18 @@ const eventService = {
     const response = await api.post(`/events/${id}/budget/settle`, data);
     return response.data;
   },
+
+  // Approve Budget Request
+  approveBudget: async (id, budgetId, data) => {
+    const response = await api.patch(`/events/${id}/budget/${budgetId}/approve`, data);
+    return response.data;
+  },
+
+  // Submit Post-Event Report
+  submitReport: async (id, data) => {
+    const response = await api.post(`/events/${id}/report`, data);
+    return response.data;
+  },
 };
 
 export default eventService;
