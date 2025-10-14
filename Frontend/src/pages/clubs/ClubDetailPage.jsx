@@ -24,8 +24,10 @@ const ClubDetailPage = () => {
         clubService.getClub(clubId),
         eventService.list({ clubId, limit: 10 }),
       ]);
-      setClub(clubRes.data.club);
-      setEvents(eventsRes.data.events || []);
+      // Backend: successResponse(res, { club }) → { status, data: { club: {...} } }
+      // clubService returns response.data → { status, data: { club: {...} } }
+      setClub(clubRes.data?.club);
+      setEvents(eventsRes.data?.events || []);
     } catch (error) {
       console.error('Error fetching club details:', error);
     } finally {
@@ -55,9 +57,13 @@ const ClubDetailPage = () => {
     );
   }
 
+  // ✅ Check if coordinator is assigned to THIS specific club
+  const isAssignedCoordinator = user?.roles?.global === 'coordinator' && 
+                                 club?.coordinator?._id === user._id;
+  
   const canManage = user?.roles?.global === 'admin' || 
-                    user?.roles?.global === 'coordinator' ||
-                    user?.clubRoles?.some(cr => cr.clubId === clubId && cr.roles.includes('president'));
+                    isAssignedCoordinator ||
+                    user?.roles?.scoped?.some(cr => cr.club?.toString() === clubId && cr.role === 'president');
 
   return (
     <Layout>
@@ -95,7 +101,7 @@ const ClubDetailPage = () => {
                 </div>
                 <div className="meta-item">
                   <span className="meta-icon">👨‍🏫</span>
-                  <span>Coordinator: {club.coordinatorId?.name || 'N/A'}</span>
+                  <span>Coordinator: {club.coordinator?.profile?.name || 'N/A'}</span>
                 </div>
               </div>
 

@@ -27,46 +27,39 @@ class SearchService {
     const tasks = [];
     const results = {};
 
-    // Build search query with text search or regex fallback
-    const buildQuery = (model, textFields, extra = {}) => {
+    // Build search query with regex (no text index required)
+    const buildQuery = (model, textFields, extra = {}, populateFields = []) => {
       let query = { ...extra };
       
       if (q && q.trim()) {
-        // Try text search first, fallback to regex
-        try {
-          query.$text = { $search: q };
-          return model.find(query, { score: { $meta: 'textScore' } })
-            .sort({ score: { $meta: 'textScore' } })
-            .skip(skip).limit(limit)
-            .populate('club', 'name')
-            .populate('user', 'profile.name rollNumber')
-            .lean();
-        } catch (err) {
-          // Fallback to regex search
-          const regex = new RegExp(q, 'i');
-          const orConditions = textFields.map(field => ({ [field]: regex }));
-          query.$or = orConditions;
-        }
+        // Use regex search (works without indexes)
+        const regex = new RegExp(q.trim(), 'i');
+        const orConditions = textFields.map(field => ({ [field]: regex }));
+        query.$or = orConditions;
       }
       
-      return model.find(query)
+      let queryBuilder = model.find(query)
         .sort({ createdAt: -1 })
-        .skip(skip).limit(limit)
-        .populate('club', 'name')
-        .populate('user', 'profile.name rollNumber')
-        .lean();
+        .skip(skip).limit(limit);
+      
+      // Only populate specified fields
+      populateFields.forEach(field => {
+        queryBuilder = queryBuilder.populate(field.path, field.select);
+      });
+      
+      return queryBuilder.lean();
     };
 
-    // Search clubs
+    // Search clubs (no populate needed)
     if (!type || type === 'club') {
       const extra = {};
       if (category) extra.category = category;
       if (status) extra.status = status;
-      tasks.push(buildQuery(Club, ['name','description'], extra)
+      tasks.push(buildQuery(Club, ['name','description'], extra, [])
         .then(d => (results.clubs = d)));
     }
 
-    // Search events
+    // Search events (populate club)
     if (!type || type === 'event') {
       const extra = {};
       if (dateFrom || dateTo) {
@@ -74,22 +67,25 @@ class SearchService {
         if (dateFrom) extra.dateTime.$gte = new Date(dateFrom);
         if (dateTo)   extra.dateTime.$lte = new Date(dateTo);
       }
-      tasks.push(buildQuery(Event, ['title','description'], extra)
-        .then(d => (results.events = d)));
+      tasks.push(buildQuery(Event, ['title','description'], extra, [
+        { path: 'club', select: 'name' }
+      ]).then(d => (results.events = d)));
     }
 
-    // Search users
+    // Search users (no populate needed)
     if (!type || type === 'user') {
       const extra = {};
       if (department) extra['profile.department'] = department;
-      tasks.push(buildQuery(User, ['profile.name','rollNumber','email'], extra)
+      tasks.push(buildQuery(User, ['profile.name','rollNumber','email'], extra, [])
         .then(d => (results.users = d)));
     }
 
-    // Search documents
+    // Search documents (populate club and uploadedBy)
     if (!type || type === 'document') {
-      tasks.push(buildQuery(Document, ['metadata.filename'], {})
-        .then(d => (results.documents = d)));
+      tasks.push(buildQuery(Document, ['metadata.filename'], {}, [
+        { path: 'club', select: 'name' },
+        { path: 'uploadedBy', select: 'profile.name' }
+      ]).then(d => (results.documents = d)));
     }
 
     await Promise.all(tasks);

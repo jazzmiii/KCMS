@@ -22,7 +22,7 @@ const RecruitmentsPage = () => {
       if (filter !== 'all') params.status = filter;
 
       const response = await recruitmentService.list(params);
-      setRecruitments(response.data.recruitments || []);
+      setRecruitments(response.data?.data?.recruitments || []);
     } catch (error) {
       console.error('Error fetching recruitments:', error);
     } finally {
@@ -46,8 +46,8 @@ const RecruitmentsPage = () => {
     return diff > 0 ? diff : 0;
   };
 
-  const canCreateRecruitment = user?.clubRoles?.some(cr => 
-    cr.roles.includes('president') || cr.roles.includes('core')
+  const canCreateRecruitment = user?.roles?.scoped?.some(cr => 
+    cr.role === 'president' || cr.role === 'core'
   );
 
   return (

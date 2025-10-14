@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import Layout from '../../components/Layout';
-import api from '../../services/api';
+import documentService from '../../services/documentService';
+import clubService from '../../services/clubService';
+import { useAuth } from '../../context/AuthContext';
 import { 
   FaImage, 
   FaUpload, 
@@ -39,12 +41,22 @@ function GalleryPage() {
   const [totalPages, setTotalPages] = useState(1);
 
   useEffect(() => {
-    fetchDocuments();
-    fetchAlbums();
     fetchClubs();
-  }, [selectedAlbum, searchQuery, page]);
+  }, []);
+
+  useEffect(() => {
+    if (uploadClubId) {
+      fetchDocuments();
+      fetchAlbums();
+    }
+  }, [uploadClubId, selectedAlbum, searchQuery, page]);
 
   const fetchDocuments = async () => {
+    if (!uploadClubId) {
+      setDocuments([]);
+      return;
+    }
+
     try {
       setLoading(true);
       const params = {
@@ -61,31 +73,39 @@ function GalleryPage() {
         params.search = searchQuery;
       }
 
-      const response = await api.get('/documents', { params });
-      setDocuments(response.data.data.items || []);
-      setTotalPages(Math.ceil(response.data.data.total / 20));
+      const response = await documentService.list(uploadClubId, params);
+      setDocuments(response.data?.items || []);
+      setTotalPages(Math.ceil((response.data?.total || 0) / 20));
     } catch (err) {
       console.error('Error fetching documents:', err);
+      setDocuments([]);
     } finally {
       setLoading(false);
     }
   };
 
   const fetchAlbums = async () => {
+    if (!uploadClubId) {
+      setAlbums([]);
+      return;
+    }
+
     try {
-      const response = await api.get('/documents/albums');
-      setAlbums(response.data.data || []);
+      const response = await documentService.getAlbums(uploadClubId);
+      setAlbums(response.data || []);
     } catch (err) {
       console.error('Error fetching albums:', err);
+      setAlbums([]);
     }
   };
 
   const fetchClubs = async () => {
     try {
-      const response = await api.get('/clubs');
-      setClubs(response.data.data.items || []);
+      const response = await clubService.listClubs();
+      setClubs(response.data?.clubs || []);
     } catch (err) {
       console.error('Error fetching clubs:', err);
+      setClubs([]);
     }
   };
 
@@ -107,27 +127,22 @@ function GalleryPage() {
 
     try {
       setUploading(true);
-      const formData = new FormData();
       
-      uploadFiles.forEach(file => {
-        formData.append('files', file);
-      });
+      const metadata = {};
+      if (uploadAlbum) metadata.album = uploadAlbum;
+      if (uploadDescription) metadata.description = uploadDescription;
 
-      if (uploadAlbum) formData.append('album', uploadAlbum);
-      if (uploadDescription) formData.append('description', uploadDescription);
-
-      const endpoint = uploadFiles.length > 1 
-        ? `/documents/bulk-upload?clubId=${uploadClubId}`
-        : `/documents/upload?clubId=${uploadClubId}`;
-
-      await api.post(endpoint, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      if (uploadFiles.length > 1) {
+        await documentService.bulkUpload(uploadClubId, uploadFiles, metadata);
+      } else {
+        await documentService.upload(uploadClubId, uploadFiles, metadata);
+      }
 
       alert('Files uploaded successfully!');
       setShowUploadModal(false);
       setUploadFiles([]);
       setUploadDescription('');
+      setUploadAlbum('');
       fetchDocuments();
     } catch (err) {
       console.error('Error uploading files:', err);
@@ -143,8 +158,13 @@ function GalleryPage() {
       return;
     }
 
+    if (!uploadClubId) {
+      alert('Please select a club first');
+      return;
+    }
+
     try {
-      await api.post('/documents/albums', {
+      await documentService.createAlbum(uploadClubId, {
         name: newAlbumName,
         description: newAlbumDescription
       });
@@ -165,8 +185,10 @@ function GalleryPage() {
       return;
     }
 
+    if (!uploadClubId) return;
+
     try {
-      await api.delete(`/documents/${docId}`);
+      await documentService.delete(uploadClubId, docId);
       alert('Image deleted successfully!');
       fetchDocuments();
     } catch (err) {
@@ -176,18 +198,11 @@ function GalleryPage() {
   };
 
   const handleDownload = async (doc) => {
-    try {
-      const response = await api.get(`/documents/${doc._id}/download`, {
-        responseType: 'blob'
-      });
+    if (!uploadClubId) return;
 
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', doc.filename || 'image.jpg');
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
+    try {
+      const response = await documentService.download(uploadClubId, doc._id);
+      documentService.downloadBlob(response.data, doc.filename || 'image.jpg');
     } catch (err) {
       console.error('Error downloading image:', err);
       alert('Failed to download image');
@@ -214,6 +229,23 @@ function GalleryPage() {
 
         {/* Search and Filters */}
         <div className="gallery-filters">
+          <div className="club-selector">
+            <label>Select Club:</label>
+            <select
+              value={uploadClubId}
+              onChange={(e) => {
+                setUploadClubId(e.target.value);
+                setSelectedAlbum('all');
+                setPage(1);
+              }}
+            >
+              <option value="">-- Select a Club --</option>
+              {clubs.map(club => (
+                <option key={club._id} value={club._id}>{club.name}</option>
+              ))}
+            </select>
+          </div>
+
           <div className="search-box">
             <FaSearch />
             <input
@@ -221,6 +253,7 @@ function GalleryPage() {
               placeholder="Search images..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              disabled={!uploadClubId}
             />
           </div>
 
@@ -231,6 +264,7 @@ function GalleryPage() {
                 setSelectedAlbum(e.target.value);
                 setPage(1);
               }}
+              disabled={!uploadClubId}
             >
               <option value="all">All Albums</option>
               {albums.map(album => (
@@ -243,7 +277,13 @@ function GalleryPage() {
         </div>
 
         {/* Gallery Grid */}
-        {loading ? (
+        {!uploadClubId ? (
+          <div className="empty-state">
+            <FaImage className="empty-icon" />
+            <h3>Select a Club</h3>
+            <p>Please select a club from the dropdown above to view its gallery</p>
+          </div>
+        ) : loading ? (
           <div className="loading">Loading images...</div>
         ) : documents.length === 0 ? (
           <div className="empty-state">

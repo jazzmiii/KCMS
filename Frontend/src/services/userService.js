@@ -32,6 +32,11 @@ const userService = {
     return response.data;
   },
 
+  // Alias for backward compatibility
+  list: async (params = {}) => {
+    return userService.listUsers(params);
+  },
+
   // Get User By ID (Admin only)
   getUserById: async (id) => {
     const response = await api.get(`/users/${id}`);

@@ -6,6 +6,25 @@ function normalizeRole(r) {
 }
 
 /**
+ * Core team roles (all positions that are considered "core" level)
+ */
+const CORE_ROLES = ['core', 'vicePresident', 'secretary', 'treasurer', 'leadPR', 'leadTech'];
+
+/**
+ * Check if a role is a core team role
+ */
+function isCoreRole(role) {
+  return CORE_ROLES.includes(role);
+}
+
+/**
+ * Check if a role is president or higher
+ */
+function isPresidentOrHigher(role) {
+  return role === 'president';
+}
+
+/**
  * Check if user has required global role
  * @param {Object} user - User object with roles
  * @param {string[]} allowed - Array of allowed global roles
@@ -248,5 +267,100 @@ exports.requireAdminOrCoordinatorOrClubRole = (clubRoles = [], clubParam = 'club
     }
 
     return errorResponse(res, 403, 'Access denied: Insufficient permissions');
+  };
+};
+
+/**
+ * Require president role ONLY (not core team)
+ * @param {string} clubParam - Parameter name for clubId
+ */
+exports.requirePresident = (clubParam = 'clubId') => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return errorResponse(res, 401, 'Authentication required');
+    }
+
+    // Admin always has access
+    if (req.user.roles?.global === 'admin') {
+      return next();
+    }
+
+    const clubId = req.params[clubParam] || req.body[clubParam] || req.query[clubParam];
+    
+    if (!clubId) {
+      return errorResponse(res, 400, `${clubParam} is required`);
+    }
+
+    // Check if user is president of this club
+    const membership = req.user.roles?.scoped?.find(
+      sc => sc.club.toString() === clubId
+    );
+
+    if (!membership) {
+      return errorResponse(res, 403, 'Not a member of this club');
+    }
+
+    // Check if president
+    if (membership.role !== 'president') {
+      return errorResponse(res, 403, `President access required. Your role: ${membership.role}`);
+    }
+
+    next();
+  };
+};
+
+/**
+ * Require assigned coordinator OR club role for EVENT operations
+ * This middleware loads the event, finds its club, then checks permissions
+ * @param {string[]} clubRoles - Required club roles (e.g., ['core', 'president'])
+ */
+exports.requireAssignedCoordinatorOrClubRoleForEvent = (clubRoles = []) => {
+  return async (req, res, next) => {
+    if (!req.user) {
+      return errorResponse(res, 401, 'Authentication required');
+    }
+
+    // Admin always has access
+    if (req.user.roles?.global === 'admin') {
+      return next();
+    }
+
+    // Get event ID from params
+    const eventId = req.params.id;
+    
+    if (!eventId) {
+      return errorResponse(res, 400, 'Event ID is required');
+    }
+
+    try {
+      // Load event to get its club
+      const { Event } = require('../modules/event/event.model');
+      const event = await Event.findById(eventId).populate('club', 'coordinator');
+      
+      if (!event) {
+        return errorResponse(res, 404, 'Event not found');
+      }
+
+      // Check if assigned coordinator
+      if (req.user.roles?.global === 'coordinator') {
+        // event.club is populated with coordinator field
+        if (event.club.coordinator && event.club.coordinator.toString() === req.user.id.toString()) {
+          return next(); // ✅ Assigned coordinator - allow access
+        }
+      }
+
+      // Check club roles
+      if (clubRoles.length > 0) {
+        const hasClubRole = checkScopedRole(req.user, event.club._id, clubRoles);
+        if (hasClubRole) {
+          return next();
+        }
+      }
+
+      return errorResponse(res, 403, 'Access denied: Not assigned coordinator or club member');
+    } catch (error) {
+      console.error('Permission check error:', error);
+      return errorResponse(res, 500, 'Error checking permissions');
+    }
   };
 };

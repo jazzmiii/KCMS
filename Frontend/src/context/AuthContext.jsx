@@ -43,8 +43,15 @@ export const AuthProvider = ({ children }) => {
 
   const hasClubRole = (clubId, role) => {
     if (!user) return false;
-    const clubRole = user.clubRoles?.find(cr => cr.clubId === clubId);
-    return clubRole?.roles?.includes(role);
+    // Backend structure: roles.scoped = [{ club: ObjectId, role: String }]
+    const clubRole = user.roles?.scoped?.find(cr => cr.club?.toString() === clubId?.toString());
+    return clubRole?.role === role;
+  };
+
+  const hasAnyClubRole = (clubId, roles = []) => {
+    if (!user || !roles.length) return false;
+    const clubRole = user.roles?.scoped?.find(cr => cr.club?.toString() === clubId?.toString());
+    return clubRole && roles.includes(clubRole.role);
   };
 
   const value = {
@@ -56,6 +63,7 @@ export const AuthProvider = ({ children }) => {
     updateUser,
     hasRole,
     hasClubRole,
+    hasAnyClubRole,
     isAuthenticated: !!user,
   };
 

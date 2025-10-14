@@ -20,6 +20,8 @@ const EventDetailPage = () => {
   const fetchEventDetails = async () => {
     try {
       const response = await eventService.getById(id);
+      // Backend: successResponse(res, { event }) → { status, data: { event: {...} } }
+      // eventService returns response.data → { status, data: { event: {...} } }
       setEvent(response.data.event);
     } catch (error) {
       console.error('Error fetching event details:', error);
@@ -65,9 +67,9 @@ const EventDetailPage = () => {
     );
   }
 
-  const canManage = user?.clubRoles?.some(cr => 
-    cr.clubId === event.clubId?._id && 
-    (cr.roles.includes('president') || cr.roles.includes('core'))
+  const canManage = user?.roles?.scoped?.some(cr => 
+    cr.club?.toString() === event.clubId?._id?.toString() && 
+    (cr.role === 'president' || cr.role === 'core')
   ) || user?.roles?.global === 'admin' || user?.roles?.global === 'coordinator';
 
   const isPublished = event.status === 'published';

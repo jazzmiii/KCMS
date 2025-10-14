@@ -22,7 +22,7 @@ const EventsPage = () => {
       if (filter !== 'all') params.status = filter;
 
       const response = await eventService.list(params);
-      setEvents(response.data.events || []);
+      setEvents(response.data?.data?.events || []);
     } catch (error) {
       console.error('Error fetching events:', error);
     } finally {
@@ -30,8 +30,8 @@ const EventsPage = () => {
     }
   };
 
-  const canCreateEvent = user?.clubRoles?.some(cr => 
-    cr.roles.includes('president') || cr.roles.includes('core')
+  const canCreateEvent = user?.roles?.scoped?.some(cr => 
+    cr.role === 'president' || cr.role === 'core'
   ) || user?.roles?.global === 'admin';
 
   const getStatusBadgeClass = (status) => {

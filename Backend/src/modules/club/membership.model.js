@@ -15,14 +15,14 @@ const MembershipSchema = new mongoose.Schema(
     role: {
       type: String,
       enum: [
-        'member',
-        'core',
-        'president',
-        'vicePresident',
-        'secretary',
-        'treasurer',
-        'leadPR',
-        'leadTech'
+        'member',         // Regular member
+        'core',           // Core team: generic core member
+        'vicePresident',  // Core: Vice President
+        'secretary',      // Core: Secretary
+        'treasurer',      // Core: Treasurer
+        'leadPR',         // Core: Lead PR
+        'leadTech',       // Core: Lead Tech
+        'president'       // President (highest level, only one per club)
       ],
       default: 'member'
     },

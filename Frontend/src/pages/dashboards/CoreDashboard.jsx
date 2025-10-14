@@ -30,22 +30,25 @@ const CoreDashboard = () => {
       // Get clubs where user has management role (core member or higher)
       const managementRoles = ['core', 'president', 'vicePresident', 'secretary', 'treasurer', 'leadPR', 'leadTech'];
       const clubsRes = await userService.getMyClubs(managementRoles);
-      const userClubs = clubsRes.data.clubs || [];
+      // Backend: successResponse(res, { clubs }) → { status, data: { clubs } }
+      const userClubs = clubsRes.data?.clubs || [];
       const clubIds = userClubs.map(c => c._id);
 
       const [eventsRes, recruitmentsRes] = await Promise.all([
-        eventService.list({ limit: 10, status: 'published' }),
-        recruitmentService.list({ limit: 10 }),
+        eventService.list({ limit: 100, status: 'published' }),
+        recruitmentService.list({ limit: 100 }),
       ]);
 
       // Filter events from user's clubs
-      const userEvents = eventsRes.data.events?.filter(event =>
-        clubIds.includes(event.clubId?._id)
+      // Backend: successResponse(res, { total, events }) → { status, data: { total, events } }
+      const userEvents = eventsRes.data?.events?.filter(event =>
+        clubIds.includes(event.club?._id)
       ) || [];
 
       // Filter recruitments from user's clubs
-      const userRecruitments = recruitmentsRes.data.recruitments?.filter(rec =>
-        clubIds.includes(rec.clubId?._id)
+      // Backend: successResponse(res, { total, items }) → { status, data: { total, items } }
+      const userRecruitments = recruitmentsRes.data?.items?.filter(rec =>
+        clubIds.includes(rec.club?._id)
       ) || [];
 
       setMyClubs(userClubs);
@@ -235,15 +238,15 @@ const CoreDashboard = () => {
               {upcomingEvents.map((event) => (
                 <div key={event._id} className="event-item">
                   <div className="event-date-badge">
-                    <span className="day">{new Date(event.date).getDate()}</span>
+                    <span className="day">{new Date(event.dateTime).getDate()}</span>
                     <span className="month">
-                      {new Date(event.date).toLocaleString('default', { month: 'short' })}
+                      {new Date(event.dateTime).toLocaleString('default', { month: 'short' })}
                     </span>
                   </div>
                   <div className="event-info">
-                    <h3>{event.name}</h3>
+                    <h3>{event.title}</h3>
                     <p>📍 {event.venue}</p>
-                    <p>🕐 {new Date(event.date).toLocaleTimeString('en-US', { 
+                    <p>🕐 {new Date(event.dateTime).toLocaleTimeString('en-US', { 
                       hour: '2-digit', 
                       minute: '2-digit' 
                     })}</p>

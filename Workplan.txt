@@ -146,8 +146,6 @@ Actors: Admin, Coordinator, Club-Core, Students
 3.1 Club Creation
 text
 
-Status: draft → pending_approval → active
-
 Steps:
 1. Admin initiates club creation
 2. Enter club details:
@@ -158,9 +156,8 @@ Steps:
    - coordinatorId (faculty)
 3. Upload club logo (max 2MB, square)
 4. Set initial core members (at least president)
-5. Coordinator reviews & approves
-6. Club becomes active
-7. Welcome email to coordinator & president
+5.Club becomes active
+6. Welcome email to coordinator & president
 3.2 Club Discovery & Info
 text
 

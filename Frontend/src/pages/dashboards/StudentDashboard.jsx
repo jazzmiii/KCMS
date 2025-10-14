@@ -5,16 +5,17 @@ import Layout from '../../components/Layout';
 import clubService from '../../services/clubService';
 import eventService from '../../services/eventService';
 import recruitmentService from '../../services/recruitmentService';
+import userService from '../../services/userService';
 import '../../styles/Dashboard.css';
 
 const StudentDashboard = () => {
   const { user } = useAuth();
   const [stats, setStats] = useState({
-    myClubs: 0,
+    totalClubs: 0,
     upcomingEvents: 0,
     openRecruitments: 0,
   });
-  const [myClubs, setMyClubs] = useState([]);
+  const [clubs, setClubs] = useState([]);
   const [upcomingEvents, setUpcomingEvents] = useState([]);
   const [openRecruitments, setOpenRecruitments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -25,20 +26,26 @@ const StudentDashboard = () => {
 
   const fetchDashboardData = async () => {
     try {
+      // Add timestamp to bypass stale cache
+      const timestamp = Date.now();
       const [clubsRes, eventsRes, recruitmentsRes] = await Promise.all([
-        clubService.listClubs({ limit: 4 }),
-        eventService.list({ limit: 5, status: 'published' }),
+        clubService.listClubs({ limit: 6, status: 'active', _t: timestamp }), // Get all active clubs (preview)
+        eventService.list({ limit: 10, status: 'published' }),
         recruitmentService.list({ limit: 5, status: 'open' }),
       ]);
 
-      setMyClubs(clubsRes.data.clubs || []);
-      setUpcomingEvents(eventsRes.data.events || []);
-      setOpenRecruitments(recruitmentsRes.data.recruitments || []);
+      // Backend: successResponse(res, { total, clubs }) → { status, data: { total, clubs } }
+      const allClubs = clubsRes.data?.clubs || [];
+      setClubs(allClubs);
+      // Backend: successResponse(res, { total, events }) → { status, data: { total, events } }
+      setUpcomingEvents(eventsRes.data?.events || []);
+      // Backend: successResponse(res, { total, items }) → { status, data: { total, items } }
+      setOpenRecruitments(recruitmentsRes.data?.items || []);
 
       setStats({
-        myClubs: clubsRes.data.total || 0,
-        upcomingEvents: eventsRes.data.total || 0,
-        openRecruitments: recruitmentsRes.data.total || 0,
+        totalClubs: clubsRes.data?.total || allClubs.length,
+        upcomingEvents: eventsRes.data?.total || 0,
+        openRecruitments: recruitmentsRes.data?.total || 0,
       });
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
@@ -62,8 +69,8 @@ const StudentDashboard = () => {
           <div className="stat-card">
             <div className="stat-icon">🎯</div>
             <div className="stat-content">
-              <h3>{stats.myClubs}</h3>
-              <p>Active Clubs</p>
+              <h3>{stats.totalClubs}</h3>
+              <p>Total Clubs</p>
             </div>
           </div>
           <div className="stat-card">
@@ -153,15 +160,15 @@ const StudentDashboard = () => {
               {upcomingEvents.map((event) => (
                 <div key={event._id} className="event-item">
                   <div className="event-date-badge">
-                    <span className="day">{new Date(event.date).getDate()}</span>
+                    <span className="day">{new Date(event.dateTime).getDate()}</span>
                     <span className="month">
-                      {new Date(event.date).toLocaleString('default', { month: 'short' })}
+                      {new Date(event.dateTime).toLocaleString('default', { month: 'short' })}
                     </span>
                   </div>
                   <div className="event-info">
-                    <h3>{event.name}</h3>
+                    <h3>{event.title}</h3>
                     <p>📍 {event.venue}</p>
-                    <p>🕐 {new Date(event.date).toLocaleTimeString('en-US', { 
+                    <p>🕐 {new Date(event.dateTime).toLocaleTimeString('en-US', { 
                       hour: '2-digit', 
                       minute: '2-digit' 
                     })}</p>
@@ -177,7 +184,7 @@ const StudentDashboard = () => {
           )}
         </div>
 
-        {/* My Clubs */}
+        {/* Clubs */}
         <div className="dashboard-section">
           <div className="section-header">
             <h2>🎯 Clubs</h2>
@@ -185,9 +192,9 @@ const StudentDashboard = () => {
           </div>
           {loading ? (
             <div className="loading">Loading...</div>
-          ) : myClubs.length > 0 ? (
+          ) : clubs.length > 0 ? (
             <div className="clubs-grid">
-              {myClubs.map((club) => (
+              {clubs.map((club) => (
                 <div key={club._id} className="club-card-small">
                   <div className="club-logo-small">
                     {club.logo ? (

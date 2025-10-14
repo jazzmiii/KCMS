@@ -17,6 +17,7 @@
     "backup:weekly": "node -e \"require('./src/workers/backup.worker').performBackup('weekly')\"",
     "backup:monthly": "node -e \"require('./src/workers/backup.worker').performBackup('monthly')\"",
     "generate:keys": "node scripts/generate-keys.js",
+    "db:indexes": "node scripts/create-indexes.js",
     "lint": "eslint .",
     "test": "jest --coverage"
   },

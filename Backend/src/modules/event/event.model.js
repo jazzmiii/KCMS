@@ -14,6 +14,8 @@ const EventSchema = new mongoose.Schema(
     isPublic:     { type: Boolean, default: true },
     budget:       { type: Number, min: 0, default: 0 },
     guestSpeakers:[String],
+    participatingClubs: [{ type: mongoose.Types.ObjectId, ref: 'Club' }], // Clubs involved in event
+    allowPerformerRegistrations: { type: Boolean, default: false }, // Allow students to register as performers
     attachments: {
       proposalUrl:        String,
       budgetBreakdownUrl: String,
@@ -37,7 +39,16 @@ const EventSchema = new mongoose.Schema(
       default: 'draft'
     },
     reportSubmittedAt: Date,
-    reportDueDate: Date
+    reportDueDate: Date,
+    coordinatorOverride: {
+      overridden: { type: Boolean, default: false },
+      type: String, // 'budget_rejection', 'budget_reduction', 'event_cancellation'
+      reason: String,
+      originalBudget: Number,
+      adjustedBudget: Number,
+      overriddenBy: { type: mongoose.Types.ObjectId, ref: 'User' },
+      overriddenAt: Date
+    }
   },
   { timestamps: true }
 );

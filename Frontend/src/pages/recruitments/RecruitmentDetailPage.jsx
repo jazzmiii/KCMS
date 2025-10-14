@@ -91,9 +91,9 @@ const RecruitmentDetailPage = () => {
   }
 
   const isOpen = recruitment.status === 'open' || recruitment.status === 'closing_soon';
-  const canManage = user?.clubRoles?.some(cr => 
-    cr.clubId === recruitment.clubId?._id && 
-    (cr.roles.includes('president') || cr.roles.includes('core'))
+  const canManage = user?.roles?.scoped?.some(cr => 
+    cr.club?.toString() === recruitment.clubId?._id?.toString() && 
+    (cr.role === 'president' || cr.role === 'core')
   );
 
   return (

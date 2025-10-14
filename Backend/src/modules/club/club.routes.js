@@ -7,7 +7,8 @@ const {
   requireClubRole, 
   requireEither, 
   requireAssignedCoordinator,
-  requireAdminOrCoordinatorOrClubRole 
+  requireAdminOrCoordinatorOrClubRole,
+  requirePresident
 } = require('../../middlewares/permission');
 const validate     = require('../../middlewares/validate');
 const { validateUpload } = require('../../middlewares/fileValidator');
@@ -42,11 +43,11 @@ router.get(
   ctrl.getClub
 );
 
-// Update Settings (President can edit public settings, Coordinator approval for protected - Section 3.3)
+// Update Settings (President ONLY can edit, Coordinator approval for protected - Section 3.3)
 router.patch(
   '/:clubId/settings',
   authenticate,
-  requireEither(['admin'], ['president']), // Admin OR Club President
+  requirePresident(), // ✅ Admin OR ONLY Club President (not other core members)
   validate(v.clubId, 'params'),
   validate(v.updateSettings),
   ctrl.updateSettings
@@ -65,11 +66,11 @@ router.post(
 // NOTE: Club approval route removed - Admin creates clubs directly as 'active'
 // Only settings changes require coordinator approval (see /settings/approve above)
 
-// Archive Club (Admin OR Club President - Section 3.3)
+// Archive Club (Admin OR Club President ONLY - Section 3.3)
 router.delete(
   '/:clubId',
   authenticate,
-  requireEither(['admin'], ['president']), // Admin OR Club President
+  requirePresident(), // ✅ Admin OR ONLY Club President
   validate(v.clubId, 'params'),
   ctrl.archiveClub
 );
@@ -94,22 +95,22 @@ router.post(
   ctrl.addMember
 );
 
-// Update member role (President can assign roles - Section 2.2)
+// Update member role (President ONLY can assign roles - Section 2.2)
 router.patch(
   '/:clubId/members/:memberId',
   authenticate,
-  requireEither(['admin'], ['president']), // Admin OR Club President
+  requirePresident(), // ✅ Admin OR ONLY Club President
   validate(v.clubId, 'params'),
   validate(v.memberId, 'params'),
   validate(v.updateMemberRoleSchema),
   ctrl.updateMemberRole
 );
 
-// Remove member from club (President can remove members - Section 2.2)
+// Remove member from club (President ONLY can remove members - Section 2.2)
 router.delete(
   '/:clubId/members/:memberId',
   authenticate,
-  requireEither(['admin'], ['president']), // Admin OR Club President
+  requirePresident(), // ✅ Admin OR ONLY Club President
   validate(v.clubId, 'params'),
   validate(v.memberId, 'params'),
   ctrl.removeMember
@@ -125,11 +126,11 @@ router.get(
   ctrl.getAnalytics
 );
 
-// Upload club banner (President can upload banner - Section 3.3)
+// Upload club banner (President ONLY can upload banner - Section 3.3)
 router.post(
   '/:clubId/banner',
   authenticate,
-  requireEither(['admin'], ['president']), // Admin OR Club President
+  requirePresident(), // ✅ Admin OR ONLY Club President
   validate(v.clubId, 'params'),
   upload.single('banner'),
   validateUpload('image'), // Validate file type, size, and security

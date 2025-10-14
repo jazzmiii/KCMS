@@ -54,6 +54,27 @@ const RecruitmentSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Validate max 14 days duration (workplan requirement: Line 210)
+RecruitmentSchema.pre('save', function(next) {
+  if (this.startDate && this.endDate) {
+    const durationMs = this.endDate.getTime() - this.startDate.getTime();
+    const durationDays = durationMs / (1000 * 60 * 60 * 24);
+    
+    if (durationDays > 14) {
+      const err = new Error('Recruitment duration cannot exceed 14 days');
+      err.statusCode = 400;
+      return next(err);
+    }
+    
+    if (durationDays < 0) {
+      const err = new Error('End date must be after start date');
+      err.statusCode = 400;
+      return next(err);
+    }
+  }
+  next();
+});
+
 module.exports.Recruitment = mongoose.model(
   'Recruitment',
   RecruitmentSchema

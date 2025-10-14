@@ -143,11 +143,11 @@ exports.changeUserRole = async (req, res, next) => {
 
 exports.deleteUser = async (req, res, next) => {
   try {
-    await userService.suspendUser(
+    const deletedUser = await userService.deleteUser(
       req.params.id,
       { id: req.user.id, ip: req.ip, userAgent: req.headers['user-agent'] }
     );
-    successResponse(res, null, 'User suspended');
+    successResponse(res, deletedUser, 'User permanently deleted from database');
   } catch (err) {
     next(err);
   }

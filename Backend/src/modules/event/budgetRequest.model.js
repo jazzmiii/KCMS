@@ -12,7 +12,16 @@ const BudgetRequestSchema = new mongoose.Schema(
       default: 'pending'
     },
     approvedBy: { type: mongoose.Types.ObjectId, ref: 'User' },
-    approvedAt: Date
+    approvedAt: Date,
+    coordinatorOverride: {
+      overridden: { type: Boolean, default: false },
+      action: String, // 'reject', 'reduce_amount'
+      reason: String,
+      originalAmount: Number,
+      adjustedAmount: Number,
+      overriddenBy: { type: mongoose.Types.ObjectId, ref: 'User' },
+      overriddenAt: Date
+    }
   },
   { timestamps: true }
 );

@@ -20,7 +20,7 @@ const UserSchema = new mongoose.Schema({
 
   status: {
     type: String,
-    enum: ['pending', 'otp_sent', 'verified', 'profile_complete'],
+    enum: ['pending', 'otp_sent', 'verified', 'profile_complete', 'locked', 'suspended'],
     default: 'pending'
   },
 
@@ -36,8 +36,14 @@ const UserSchema = new mongoose.Schema({
         role: {
           type: String,
           enum: [
-            'member','core','president','vicePresident',
-            'secretary','treasurer','leadPR','leadTech'
+            'member',         // Regular member
+            'core',           // Generic core member
+            'vicePresident',  // Core: VP
+            'secretary',      // Core: Secretary
+            'treasurer',      // Core: Treasurer
+            'leadPR',         // Core: Lead PR
+            'leadTech',       // Core: Lead Tech
+            'president'       // President (highest)
           ]
         }
       }

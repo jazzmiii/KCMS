@@ -27,15 +27,31 @@ const clubService = {
     return response.data;
   },
 
-  // Approve Club
-  approveClub: async (clubId, data) => {
-    const response = await api.patch(`/clubs/${clubId}/approve`, data);
+  // Approve Protected Settings (Coordinator only)
+  approveSettings: async (clubId, approvalData) => {
+    const response = await api.post(`/clubs/${clubId}/settings/approve`, approvalData);
     return response.data;
   },
 
   // Archive Club
   archiveClub: async (clubId) => {
     const response = await api.delete(`/clubs/${clubId}`);
+    return response.data;
+  },
+
+  // Get Club Analytics
+  getAnalytics: async (clubId, params = {}) => {
+    const response = await api.get(`/clubs/${clubId}/analytics`, { params });
+    return response.data;
+  },
+
+  // Upload Club Banner
+  uploadBanner: async (clubId, file) => {
+    const formData = new FormData();
+    formData.append('banner', file);
+    const response = await api.post(`/clubs/${clubId}/banner`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
     return response.data;
   },
 

@@ -49,11 +49,14 @@ const ClubDashboard = () => {
         userService.getMyClubs() // Get all user's clubs with roles
       ]);
 
-      const clubData = clubRes.data.club || clubRes.data;
+      // Backend: successResponse(res, { club }) → { status, data: { club } }
+      const clubData = clubRes.data?.club;
       setClub(clubData);
       
-      const eventsData = eventsRes.data.events || [];
-      const recruitmentsData = recruitmentsRes.data.recruitments || [];
+      // Backend: successResponse(res, { total, events }) → { status, data: { total, events } }
+      const eventsData = eventsRes.data?.events || [];
+      // Backend: successResponse(res, { total, items }) → { status, data: { total, items } }
+      const recruitmentsData = recruitmentsRes.data?.items || [];
       
       setEvents(eventsData);
       setRecruitments(recruitmentsData);
@@ -79,19 +82,36 @@ const ClubDashboard = () => {
       });
 
       // Check if user has permission to manage this club
-      const myClubs = myClubsRes.data.clubs || [];
-      const membership = myClubs.find(c => c._id === clubId);
+      // Backend: successResponse(res, { clubs }) → { status, data: { clubs } }
+      const myClubs = myClubsRes.data?.clubs || [];
+      const membership = myClubs.find(c => c.club?._id === clubId);
       
       if (membership) {
-        setUserRole(membership.userRole);
-        const managementRoles = ['core', 'president', 'vicePresident', 'secretary', 'treasurer', 'leadPR', 'leadTech'];
-        const hasManagementRole = managementRoles.includes(membership.userRole);
-        const isAdmin = user?.roles?.global === 'admin' || user?.roles?.global === 'coordinator';
-        setCanManage(hasManagementRole || isAdmin);
+        // ✅ Backend returns: { club, role }
+        // role can be: 'member' | 'core' | 'vicePresident' | 'secretary' | 'treasurer' | 'leadPR' | 'leadTech' | 'president'
+        const role = membership.role;
+        setUserRole(role); // Store role for display
+        
+        // ✅ Define core team roles
+        const coreRoles = ['core', 'vicePresident', 'secretary', 'treasurer', 'leadPR', 'leadTech'];
+        
+        // ✅ Determine management permissions based on role hierarchy
+        const isPresident = role === 'president';
+        const isCoreTeam = coreRoles.includes(role);
+        const isAdmin = user?.roles?.global === 'admin';
+        
+        // ✅ Coordinators can only VIEW if assigned to this club
+        const isAssignedCoordinator = user?.roles?.global === 'coordinator' && 
+                                       clubData?.coordinator?._id === user._id;
+        
+        // ✅ President has full management rights, core team has limited rights
+        setCanManage(isPresident || isCoreTeam || isAdmin || isAssignedCoordinator);
       } else {
-        // Check if user is admin/coordinator
-        const isAdmin = user?.roles?.global === 'admin' || user?.roles?.global === 'coordinator';
-        setCanManage(isAdmin);
+        // Check if user is admin or assigned coordinator
+        const isAdmin = user?.roles?.global === 'admin';
+        const isAssignedCoordinator = user?.roles?.global === 'coordinator' && 
+                                       clubData?.coordinator?._id === user._id;
+        setCanManage(isAdmin || isAssignedCoordinator);
       }
     } catch (error) {
       console.error('Error fetching club dashboard data:', error);
@@ -343,7 +363,7 @@ const ClubDashboard = () => {
                       </span>
                     </div>
                     <div className="detail-item">
-                      <strong>Coordinator:</strong> {club.coordinatorId?.name || 'N/A'}
+                      <strong>Coordinator:</strong> {club.coordinator?.profile?.name || 'N/A'}
                     </div>
                   </div>
                 </div>
@@ -480,7 +500,8 @@ const ClubDashboard = () => {
             <div className="members-section">
               <div className="section-header">
                 <h2>Club Members ({members?.length || 0})</h2>
-                {canManage && (
+                {/* ✅ Only admin and core team can add members (NOT coordinators) */}
+                {canManage && user?.roles?.global !== 'coordinator' && (
                   <button 
                     className="btn btn-primary" 
                     onClick={() => setShowAddMemberModal(true)}
@@ -597,22 +618,36 @@ const AddMemberModal = ({ clubId, onClose, onSuccess }) => {
   const [error, setError] = useState('');
   const [users, setUsers] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [fetchingUsers, setFetchingUsers] = useState(true);
 
   useEffect(() => {
     fetchUsers();
   }, []);
 
   const fetchUsers = async () => {
+    setFetchingUsers(true);
     try {
-      const response = await userService.list({ limit: 100 });
-      setUsers(response.data.users || []);
+      // Backend validator max limit is 100
+      const response = await userService.listUsers({ limit: 100 });
+      console.log('Users API response:', response);
+      // Backend: successResponse(res, { total, users }) → { status, data: { total, users } }
+      setUsers(response.data?.users || []);
     } catch (err) {
       console.error('Error fetching users:', err);
+      setError('Failed to load users. Please try again.');
+    } finally {
+      setFetchingUsers(false);
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    if (!userId) {
+      setError('Please select a user');
+      return;
+    }
+    
     setLoading(true);
     setError('');
 
@@ -627,30 +662,32 @@ const AddMemberModal = ({ clubId, onClose, onSuccess }) => {
     }
   };
 
+  // Fixed: rollNumber is direct property, not inside profile
   const filteredUsers = users.filter(u => {
-    if (!searchTerm) return true; // Show all if no search term
+    if (!searchTerm) return false; // Only show users when searching
     
-    const searchLower = searchTerm.toLowerCase();
-    const rollNumber = u.profile?.rollNumber?.toLowerCase() || '';
-    const email = u.email?.toLowerCase() || '';
-    const name = u.profile?.name?.toLowerCase() || '';
+    const searchLower = searchTerm.toLowerCase().trim();
+    if (!searchLower) return false;
     
-    const matches = rollNumber.includes(searchLower) || 
-                    email.includes(searchLower) ||
-                    name.includes(searchLower);
+    const rollNumber = (u.rollNumber || '').toLowerCase();
+    const email = (u.email || '').toLowerCase();
+    const name = (u.profile?.name || '').toLowerCase();
     
-    if (matches) {
-      console.log('Match found:', { rollNumber, email, name, searchTerm });
-    }
-    
-    return matches;
+    return rollNumber.includes(searchLower) || 
+           email.includes(searchLower) ||
+           name.includes(searchLower);
   });
-  
-  console.log('Search term:', searchTerm);
-  console.log('Total users:', users.length);
-  console.log('Filtered users:', filteredUsers.length);
 
-  const roles = ['member', 'core', 'president', 'vicePresident', 'secretary', 'treasurer', 'leadPR', 'leadTech'];
+  const roles = [
+    { value: 'member', label: 'Member' },
+    { value: 'core', label: 'Core Team' },
+    { value: 'president', label: 'President' },
+    { value: 'vicePresident', label: 'Vice President' },
+    { value: 'secretary', label: 'Secretary' },
+    { value: 'treasurer', label: 'Treasurer' },
+    { value: 'leadPR', label: 'Lead PR' },
+    { value: 'leadTech', label: 'Lead Tech' }
+  ];
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -667,57 +704,72 @@ const AddMemberModal = ({ clubId, onClose, onSuccess }) => {
             <label>Search User *</label>
             <input
               type="text"
-              placeholder="Search by roll number or email..."
+              className="form-control"
+              placeholder="Type roll number, name, or email to search..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setUserId(''); // Reset selection when search changes
+              }}
+              autoFocus
             />
+            <small className="form-hint">
+              {fetchingUsers ? 'Loading users...' : 
+               searchTerm ? `${filteredUsers.length} user(s) found` : 
+               'Start typing to search users'}
+            </small>
           </div>
 
           <div className="form-group">
             <label>Select User *</label>
             <select
+              className="form-control"
               value={userId}
               onChange={(e) => setUserId(e.target.value)}
               required
+              disabled={!searchTerm || filteredUsers.length === 0}
             >
-              <option value="">-- Select a user --</option>
-              {filteredUsers.length === 0 ? (
-                <option value="" disabled>No users found - try different search term</option>
-              ) : (
-                filteredUsers.map(u => (
-                  <option key={u._id} value={u._id}>
-                    {u.profile?.rollNumber ? `${u.profile.rollNumber} - ` : ''}
-                    {u.profile?.name ? `${u.profile.name} - ` : ''}
-                    {u.email}
-                  </option>
-                ))
-              )}
+              <option value="">
+                {!searchTerm ? '-- Search first to see users --' :
+                 filteredUsers.length === 0 ? '-- No users found --' :
+                 '-- Select a user --'}
+              </option>
+              {filteredUsers.map(u => (
+                <option key={u._id} value={u._id}>
+                  {u.rollNumber || 'No Roll Number'} | {u.profile?.name || 'No Name'} | {u.email}
+                </option>
+              ))}
             </select>
-            <small className="form-hint">
-              {searchTerm ? `${filteredUsers.length} user(s) found` : `${users.length} total users`}
-            </small>
           </div>
 
           <div className="form-group">
             <label>Role *</label>
             <select
+              className="form-control"
               value={role}
               onChange={(e) => setRole(e.target.value)}
               required
             >
               {roles.map(r => (
-                <option key={r} value={r}>
-                  {r.charAt(0).toUpperCase() + r.slice(1)}
+                <option key={r.value} value={r.value}>
+                  {r.label}
                 </option>
               ))}
             </select>
+            <small className="form-hint">
+              Select the role for this member in the club
+            </small>
           </div>
 
           <div className="modal-actions">
             <button type="button" className="btn btn-secondary" onClick={onClose}>
               Cancel
             </button>
-            <button type="submit" className="btn btn-primary" disabled={loading}>
+            <button 
+              type="submit" 
+              className="btn btn-primary" 
+              disabled={loading || !userId}
+            >
               {loading ? 'Adding...' : 'Add Member'}
             </button>
           </div>

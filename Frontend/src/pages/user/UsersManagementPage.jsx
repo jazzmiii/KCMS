@@ -21,7 +21,8 @@ const UsersManagementPage = () => {
       if (roleFilter !== 'all') params.role = roleFilter;
 
       const response = await userService.listUsers(params);
-      setUsers(response.data.users || []);
+      // Backend: successResponse(res, { total, users }) → { status, data: { total, users } }
+      setUsers(response.data?.users || []);
     } catch (error) {
       console.error('Error fetching users:', error);
     } finally {

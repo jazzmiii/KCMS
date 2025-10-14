@@ -36,7 +36,7 @@ const LoginPage = () => {
         navigate('/admin/dashboard');
       } else if (user.roles?.global === 'coordinator') {
         navigate('/coordinator/dashboard');
-      } else if (user.clubRoles?.some(cr => cr.roles.includes('core') || cr.roles.includes('president'))) {
+      } else if (user.roles?.scoped?.some(cr => cr.role === 'core' || cr.role === 'president')) {
         navigate('/core/dashboard');
       } else {
         navigate('/dashboard');

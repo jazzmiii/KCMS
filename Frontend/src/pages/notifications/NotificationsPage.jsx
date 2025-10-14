@@ -57,9 +57,9 @@ function NotificationsPage() {
   const handleMarkRead = async (id, currentReadStatus) => {
     try {
       await notificationService.markRead(id, !currentReadStatus);
-      // Update local state
+      // Update local state - use isRead to match backend
       setNotifications(notifications.map(n => 
-        n._id === id ? { ...n, read: !currentReadStatus } : n
+        n._id === id ? { ...n, isRead: !currentReadStatus, read: !currentReadStatus } : n
       ));
     } catch (err) {
       console.error('Error marking notification:', err);
@@ -69,15 +69,15 @@ function NotificationsPage() {
   const handleMarkAllRead = async () => {
     try {
       await notificationService.markAllRead();
-      setNotifications(notifications.map(n => ({ ...n, read: true })));
+      setNotifications(notifications.map(n => ({ ...n, isRead: true, read: true })));
     } catch (err) {
       console.error('Error marking all read:', err);
     }
   };
 
   const handleNotificationClick = (notification) => {
-    // Mark as read
-    if (!notification.read) {
+    // Mark as read - check both isRead and read for compatibility
+    if (!notification.isRead && !notification.read) {
       handleMarkRead(notification._id, false);
     }
 
@@ -150,7 +150,7 @@ function NotificationsPage() {
     }
   };
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const unreadCount = notifications.filter(n => !n.isRead && !n.read).length;
 
   return (
     <Layout>
@@ -206,48 +206,51 @@ function NotificationsPage() {
         ) : (
           <>
             <div className="notifications-list">
-              {notifications.map(notification => (
-                <div 
-                  key={notification._id}
-                  className={`notification-item ${!notification.read ? 'unread' : ''} ${getPriorityClass(notification.priority)}`}
-                  onClick={() => handleNotificationClick(notification)}
-                >
-                  <div className="notification-icon-wrapper">
-                    {getNotificationIcon(notification.type)}
-                  </div>
-                  
-                  <div className="notification-content">
-                    <div className="notification-header">
-                      <h4>{notification.title || getDefaultTitle(notification.type)}</h4>
-                      <span className="notification-time">
-                        {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })}
-                      </span>
+              {notifications.map(notification => {
+                const isRead = notification.isRead || notification.read;
+                return (
+                  <div 
+                    key={notification._id}
+                    className={`notification-item ${!isRead ? 'unread' : ''} ${getPriorityClass(notification.priority)}`}
+                    onClick={() => handleNotificationClick(notification)}
+                  >
+                    <div className="notification-icon-wrapper">
+                      {getNotificationIcon(notification.type)}
                     </div>
                     
-                    <p className="notification-message">
-                      {notification.message || getDefaultMessage(notification)}
-                    </p>
+                    <div className="notification-content">
+                      <div className="notification-header">
+                        <h4>{notification.title || getDefaultTitle(notification.type)}</h4>
+                        <span className="notification-time">
+                          {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })}
+                        </span>
+                      </div>
+                      
+                      <p className="notification-message">
+                        {notification.message || getDefaultMessage(notification)}
+                      </p>
 
-                    {notification.priority === 'URGENT' && (
-                      <span className="priority-badge urgent">URGENT</span>
-                    )}
-                    {notification.priority === 'HIGH' && (
-                      <span className="priority-badge high">HIGH</span>
-                    )}
+                      {notification.priority === 'URGENT' && (
+                        <span className="priority-badge urgent">URGENT</span>
+                      )}
+                      {notification.priority === 'HIGH' && (
+                        <span className="priority-badge high">HIGH</span>
+                      )}
+                    </div>
+
+                    <button 
+                      className="mark-read-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleMarkRead(notification._id, isRead);
+                      }}
+                      title={isRead ? 'Mark as unread' : 'Mark as read'}
+                    >
+                      {isRead ? '○' : '●'}
+                    </button>
                   </div>
-
-                  <button 
-                    className="mark-read-btn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleMarkRead(notification._id, notification.read);
-                    }}
-                    title={notification.read ? 'Mark as unread' : 'Mark as read'}
-                  >
-                    {notification.read ? '○' : '●'}
-                  </button>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             {totalPages > 1 && (

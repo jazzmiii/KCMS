@@ -28,9 +28,15 @@ const ClubsPage = () => {
       if (filters.category) params.category = filters.category;
       if (filters.search) params.search = filters.search;
       if (filters.status) params.status = filters.status;
+      
+      // ✅ If user is coordinator, filter by their assigned clubs only
+      if (user?.roles?.global === 'coordinator') {
+        params.coordinator = user._id;
+      }
 
       const response = await clubService.listClubs(params);
-      setClubs(response.data.clubs || []);
+      // Backend: successResponse(res, { total, clubs }) → { status, data: { total, clubs } }
+      setClubs(response.data?.clubs || []);
     } catch (error) {
       console.error('Error fetching clubs:', error);
     } finally {

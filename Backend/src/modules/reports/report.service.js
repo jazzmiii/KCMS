@@ -7,6 +7,7 @@ const { BudgetRequest } = require('../event/budgetRequest.model');
 const { AuditLog } = require('../audit/auditLog.model');
 const { Attendance } = require('../event/attendance.model');
 const reportGenerator = require('../../utils/reportGenerator');
+const naacService = require('./naac.service');
 
 class ReportService {
   async dashboard() {
@@ -166,58 +167,11 @@ class ReportService {
   }
 
   /**
-   * Generate NAAC/NBA Report (Excel)
+   * Generate NAAC/NBA Report (Enhanced PDF with proper formatting)
    */
   async generateNAACReport(year, userContext) {
-    const startDate = new Date(year, 0, 1);
-    const endDate = new Date(year + 1, 0, 1);
-
-    const [clubs, events, members] = await Promise.all([
-      Club.find({ status: 'active' }),
-      Event.find({ 
-        dateTime: { $gte: startDate, $lt: endDate } 
-      }).populate('club', 'name'),
-      Membership.find({ 
-        status: 'approved',
-        createdAt: { $gte: startDate, $lt: endDate }
-      })
-    ]);
-
-    const clubsData = await Promise.all(clubs.map(async club => {
-      const memberCount = await Membership.countDocuments({ 
-        club: club._id, 
-        status: 'approved' 
-      });
-      return {
-        _id: club._id,
-        name: club.name,
-        category: club.category,
-        status: club.status,
-        memberCount
-      };
-    }));
-
-    const eventsData = events.map(event => ({
-      clubId: event.club._id,
-      title: event.title,
-      dateTime: event.dateTime,
-      attendees: event.expectedAttendees || 0,
-      budget: event.budget || 0
-    }));
-
-    const membersData = members.map(member => ({
-      clubId: member.club,
-      userId: member.user,
-      role: member.role
-    }));
-
-    const fileName = `naac-report-${year}.xlsx`;
-    return await reportGenerator.generateAndUploadReport(
-      'naac',
-      { clubsData, eventsData, membersData },
-      fileName,
-      { folder: `reports/${year}` }
-    );
+    // Use the enhanced NAAC service
+    return await naacService.generateNAACReport(year, userContext);
   }
 
   /**

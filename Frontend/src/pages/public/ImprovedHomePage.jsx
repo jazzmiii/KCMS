@@ -20,6 +20,7 @@ const HomePage = () => {
   const fetchClubs = async () => {
     try {
       const response = await clubService.listClubs({ limit: 12, status: 'active' });
+      // Backend: successResponse(res, { total, clubs }) → { status, data: { total, clubs } }
       if (response?.data?.clubs && response.data.clubs.length > 0) {
         setClubs(response.data.clubs);
         setStats(prev => ({

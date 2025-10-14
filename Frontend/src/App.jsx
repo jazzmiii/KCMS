@@ -46,6 +46,8 @@ import NotificationsPage from './pages/notifications/NotificationsPage';
 
 // Admin Pages
 import MaintenanceModePage from './pages/admin/MaintenanceModePage';
+import SystemSettings from './pages/admin/SystemSettings';
+import AuditLogs from './pages/admin/AuditLogs';
 
 // Reports Pages
 import ReportsPage from './pages/reports/ReportsPage';
@@ -248,6 +250,22 @@ function App() {
             element={
               <ProtectedRoute requiredRole="admin">
                 <MaintenanceModePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/settings"
+            element={
+              <ProtectedRoute requiredRole="admin">
+                <SystemSettings />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/audit-logs"
+            element={
+              <ProtectedRoute requiredRole="admin">
+                <AuditLogs />
               </ProtectedRoute>
             }
           />

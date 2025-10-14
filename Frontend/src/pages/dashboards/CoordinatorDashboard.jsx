@@ -23,18 +23,28 @@ const CoordinatorDashboard = () => {
 
   const fetchDashboardData = async () => {
     try {
-      const [clubsRes, eventsRes] = await Promise.all([
-        clubService.listClubs({ coordinator: user._id }),
+      // Add timestamp to bypass stale cache
+      const timestamp = Date.now();
+      
+      const [clubsRes, pendingEventsRes, allEventsRes] = await Promise.all([
+        clubService.listClubs({ coordinator: user._id, _t: timestamp }),
         eventService.list({ status: 'pending_coordinator' }),
+        eventService.list({ limit: 100 }), // Get all events to count coordinator's events (max 100)
       ]);
 
-      setAssignedClubs(clubsRes.data.clubs || []);
-      setPendingEvents(eventsRes.data.events || []);
+      // Backend: successResponse(res, { total, clubs }) → { status, data: { total, clubs } }
+      const assignedClubIds = (clubsRes.data?.clubs || []).map(c => c._id);
+      const coordinatorEvents = (allEventsRes.data?.events || []).filter(event => 
+        assignedClubIds.includes(event.club?._id)
+      );
+
+      setAssignedClubs(clubsRes.data?.clubs || []);
+      setPendingEvents(pendingEventsRes.data?.events || []);
 
       setStats({
-        assignedClubs: clubsRes.data.total || 0,
-        pendingEvents: eventsRes.data.total || 0,
-        totalEvents: eventsRes.data.total || 0,
+        assignedClubs: clubsRes.data?.total || 0,
+        pendingEvents: pendingEventsRes.data?.total || 0,
+        totalEvents: coordinatorEvents.length,
       });
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
@@ -45,11 +55,13 @@ const CoordinatorDashboard = () => {
 
   const handleApproveEvent = async (eventId) => {
     try {
-      await eventService.changeStatus(eventId, 'approved');
+      // Backend expects action: 'approve' (not status: 'approved')
+      await eventService.changeStatus(eventId, 'approve');
       alert('Event approved successfully!');
       fetchDashboardData();
     } catch (error) {
-      alert('Failed to approve event');
+      console.error('Failed to approve event:', error);
+      alert('Failed to approve event: ' + (error.response?.data?.message || error.message));
     }
   };
 
@@ -134,9 +146,9 @@ const CoordinatorDashboard = () => {
                 <tbody>
                   {pendingEvents.map((event) => (
                     <tr key={event._id}>
-                      <td>{event.name}</td>
-                      <td>{event.clubId?.name || 'N/A'}</td>
-                      <td>{new Date(event.date).toLocaleDateString()}</td>
+                      <td>{event.title}</td>
+                      <td>{event.club?.name || 'N/A'}</td>
+                      <td>{new Date(event.dateTime).toLocaleDateString()}</td>
                       <td>{event.venue}</td>
                       <td>₹{event.budget || 0}</td>
                       <td>

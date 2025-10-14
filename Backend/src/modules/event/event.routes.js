@@ -1,6 +1,10 @@
 const router       = require('express').Router();
 const authenticate = require('../../middlewares/auth');
-const { permit, requireEither } = require('../../middlewares/permission');
+const { 
+  permit, 
+  requireEither, 
+  requireAssignedCoordinatorOrClubRoleForEvent 
+} = require('../../middlewares/permission');
 const validate     = require('../../middlewares/validate');
 const multer       = require('multer');
 const upload       = multer({ dest: 'uploads/' });
@@ -35,11 +39,11 @@ router.get(
   ctrl.getEvent
 );
 
-// Change Status (Core+ can change status - Section 5.1)
+// Change Status (Core+ OR Assigned Coordinator can change status - Section 5.1)
 router.patch(
   '/:id/status',
   authenticate,
-  requireEither(['admin'], ['core', 'president']), // Admin OR Club Core+
+  requireAssignedCoordinatorOrClubRoleForEvent(['core', 'vicePresident', 'secretary', 'treasurer', 'leadPR', 'leadTech', 'president']), // Admin OR Assigned Coordinator OR Club Core+
   validate(v.eventId, 'params'),
   validate(v.changeStatus),
   ctrl.changeStatus
@@ -90,6 +94,16 @@ router.post(
   validate(v.eventId, 'params'),
   validate(v.settleBudget),
   ctrl.settleBudget
+);
+
+// Coordinator Financial Override (Coordinator can override budget decisions - Section 2.1)
+router.post(
+  '/:id/financial-override',
+  authenticate,
+  requireAssignedCoordinatorOrClubRoleForEvent([]), // ✅ Only assigned coordinator (or admin)
+  validate(v.eventId, 'params'),
+  validate(v.financialOverride),
+  ctrl.coordinatorOverrideBudget
 );
 
 module.exports = router;

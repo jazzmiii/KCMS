@@ -14,6 +14,8 @@ const AdminDashboard = () => {
     totalEvents: 0,
     totalUsers: 0,
     pendingApprovals: 0,
+    activeClubs: 0,
+    publishedEvents: 0,
   });
   const [recentClubs, setRecentClubs] = useState([]);
   const [recentEvents, setRecentEvents] = useState([]);
@@ -25,23 +27,42 @@ const AdminDashboard = () => {
 
   const fetchDashboardData = async () => {
     try {
-      const [clubsRes, eventsRes, usersRes] = await Promise.all([
-        clubService.listClubs({ limit: 5 }),
+      // Add timestamp to bypass stale cache
+      const timestamp = Date.now();
+      const [clubsRes, eventsRes, usersRes, allClubsRes, allEventsRes] = await Promise.all([
+        clubService.listClubs({ limit: 5, _t: timestamp }),
         eventService.list({ limit: 5 }),
         userService.listUsers({ limit: 10 }),
+        clubService.listClubs({ limit: 100, _t: timestamp }), // Get all clubs for counts (max 100)
+        eventService.list({ limit: 100 }), // Get all events for counts (max 100)
       ]);
 
-      setRecentClubs(clubsRes.data.clubs || []);
-      setRecentEvents(eventsRes.data.events || []);
+      // Backend: successResponse(res, { clubs, total }) → { status, data: { clubs, total } }
+      setRecentClubs(clubsRes.data?.clubs || []);
+      setRecentEvents(eventsRes.data?.events || []);
 
-      setStats({
-        totalClubs: clubsRes.data.total || 0,
-        totalEvents: eventsRes.data.total || 0,
-        totalUsers: usersRes.data.total || 0,
-        pendingApprovals: clubsRes.data.clubs?.filter(c => c.status === 'pending_approval').length || 0,
-      });
+      const allClubs = allClubsRes.data?.clubs || [];
+      const allEvents = allEventsRes.data?.events || [];
+      const activeClubsCount = allClubs.filter(c => c.status === 'active').length;
+      const publishedEventsCount = allEvents.filter(e => e.status === 'published').length;
+      
+      // Note: 'pending_approval' status removed from workplan - clubs created directly as 'active'
+      // Pending approvals now refer to settings changes (pendingSettings field)
+      const pendingSettingsCount = allClubs.filter(c => c.pendingSettings).length;
+
+      const calculatedStats = {
+        totalClubs: allClubsRes.data?.total || allClubs.length,
+        totalEvents: allEventsRes.data?.total || allEvents.length,
+        totalUsers: usersRes.data?.total || 0,
+        pendingApprovals: pendingSettingsCount,
+        activeClubs: activeClubsCount,
+        publishedEvents: publishedEventsCount,
+      };
+
+      setStats(calculatedStats);
     } catch (error) {
-      console.error('Error fetching dashboard data:', error);
+      console.error('❌ Error fetching dashboard data:', error);
+      console.error('Error details:', error.response?.data);
     } finally {
       setLoading(false);
     }
@@ -112,6 +133,21 @@ const AdminDashboard = () => {
               <span className="action-icon">📅</span>
               <h3>Manage Events</h3>
               <p>Approve and monitor events</p>
+            </Link>
+            <Link to="/admin/settings" className="action-card action-primary">
+              <span className="action-icon">⚙️</span>
+              <h3>System Settings</h3>
+              <p>Configure global parameters</p>
+            </Link>
+            <Link to="/admin/audit-logs" className="action-card action-info">
+              <span className="action-icon">📋</span>
+              <h3>Audit Logs</h3>
+              <p>View system activity logs</p>
+            </Link>
+            <Link to="/reports" className="action-card action-success">
+              <span className="action-icon">📊</span>
+              <h3>Reports</h3>
+              <p>Generate NAAC/NBA reports</p>
             </Link>
           </div>
         </div>

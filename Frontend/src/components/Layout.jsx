@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import notificationService from '../services/notificationService';
-import ClubSwitcher from './ClubSwitcher';
 import '../styles/Layout.css';
 
 const Layout = ({ children }) => {
@@ -12,26 +11,69 @@ const Layout = ({ children }) => {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState([]);
+  const [seenNotifications, setSeenNotifications] = useState(new Set());
+  const notificationRef = useRef(null);
+  const userMenuRef = useRef(null);
+  const fetchingRef = useRef(false); // Prevent concurrent fetches
+  const lastFetchRef = useRef(0); // Track last fetch time
 
   useEffect(() => {
     fetchUnreadCount();
-    const interval = setInterval(fetchUnreadCount, 30000); // Poll every 30s
+    const interval = setInterval(fetchUnreadCount, 60000); // Poll every 60s
     return () => clearInterval(interval);
   }, []);
 
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (notificationRef.current && !notificationRef.current.contains(event.target)) {
+        setShowNotifications(false);
+      }
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
+        setShowUserMenu(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const fetchUnreadCount = async () => {
+    // Debounce: Prevent fetching if already fetching or fetched recently (within 5 seconds)
+    const now = Date.now();
+    if (fetchingRef.current || (now - lastFetchRef.current) < 5000) {
+      return;
+    }
+
+    fetchingRef.current = true;
+    lastFetchRef.current = now;
+
     try {
       const response = await notificationService.countUnread();
       setUnreadCount(response.data.count || 0);
     } catch (error) {
       console.error('Error fetching unread count:', error);
+    } finally {
+      fetchingRef.current = false;
     }
   };
 
   const fetchNotifications = async () => {
     try {
       const response = await notificationService.list({ limit: 10 });
-      setNotifications(response.data.notifications || []);
+      const newNotifications = response.data.items || response.data.notifications || [];
+      
+      // Filter out already seen notifications to prevent duplicates
+      const unseenNotifications = newNotifications.filter(
+        notif => !seenNotifications.has(notif._id)
+      );
+      
+      // Add new notification IDs to seen set
+      const newSeenIds = new Set(seenNotifications);
+      unseenNotifications.forEach(notif => newSeenIds.add(notif._id));
+      setSeenNotifications(newSeenIds);
+      
+      setNotifications(newNotifications);
     } catch (error) {
       console.error('Error fetching notifications:', error);
     }
@@ -44,6 +86,44 @@ const Layout = ({ children }) => {
     }
   };
 
+  const handleNotificationItemClick = async (notif) => {
+    // Mark as read if unread
+    if (!notif.isRead && !notif.read) {
+      try {
+        await notificationService.markRead(notif._id, true);
+        setNotifications(notifications.map(n => 
+          n._id === notif._id ? { ...n, isRead: true, read: true } : n
+        ));
+        setUnreadCount(prev => Math.max(0, prev - 1));
+      } catch (error) {
+        console.error('Error marking notification as read:', error);
+      }
+    }
+    
+    setShowNotifications(false);
+    
+    // Navigate based on notification type
+    const payload = notif.payload || {};
+    if (payload.eventId) {
+      navigate(`/events/${payload.eventId}`);
+    } else if (payload.recruitmentId) {
+      navigate(`/recruitments/${payload.recruitmentId}`);
+    } else if (payload.clubId) {
+      navigate(`/clubs/${payload.clubId}`);
+    }
+  };
+
+  const handleDismissNotification = async (e, notifId) => {
+    e.stopPropagation();
+    try {
+      await notificationService.markRead(notifId, true);
+      setNotifications(notifications.filter(n => n._id !== notifId));
+      setUnreadCount(prev => Math.max(0, prev - 1));
+    } catch (error) {
+      console.error('Error dismissing notification:', error);
+    }
+  };
+
   const handleLogout = async () => {
     await logout();
     navigate('/login');
@@ -52,7 +132,7 @@ const Layout = ({ children }) => {
   const getDashboardLink = () => {
     if (user?.roles?.global === 'admin') return '/admin/dashboard';
     if (user?.roles?.global === 'coordinator') return '/coordinator/dashboard';
-    if (user?.clubRoles?.some(cr => cr.roles.includes('core') || cr.roles.includes('president'))) {
+    if (user?.roles?.scoped?.some(cr => cr.role === 'core' || cr.role === 'president')) {
       return '/core/dashboard';
     }
     return '/dashboard';
@@ -81,11 +161,8 @@ const Layout = ({ children }) => {
           </div>
 
           <div className="navbar-right">
-            {/* Club Switcher - Only show for core members */}
-            <ClubSwitcher />
-
             {/* Notifications */}
-            <div className="notification-wrapper">
+            <div className="notification-wrapper" ref={notificationRef}>
               <button className="icon-btn" onClick={handleNotificationClick}>
                 <span className="icon">🔔</span>
                 {unreadCount > 0 && <span className="badge">{unreadCount}</span>}
@@ -95,28 +172,46 @@ const Layout = ({ children }) => {
                 <div className="notification-dropdown">
                   <div className="notification-header">
                     <h3>Notifications</h3>
-                    <button onClick={() => setShowNotifications(false)}>✕</button>
+                    <button className="close-btn" onClick={() => setShowNotifications(false)}>✕</button>
                   </div>
                   <div className="notification-list">
                     {notifications.length > 0 ? (
                       notifications.map((notif) => (
-                        <div key={notif._id} className={`notification-item ${notif.read ? 'read' : 'unread'}`}>
+                        <div 
+                          key={notif._id} 
+                          className={`notification-item ${(notif.isRead || notif.read) ? 'read' : 'unread'}`}
+                          onClick={() => handleNotificationItemClick(notif)}
+                        >
                           <div className="notification-content">
-                            <p className="notification-title">{notif.title}</p>
+                            <div className="notification-title-row">
+                              <p className="notification-title">{notif.title || 'New Notification'}</p>
+                              {!(notif.isRead || notif.read) && <span className="unread-dot">●</span>}
+                            </div>
                             <p className="notification-message">{notif.message}</p>
                             <span className="notification-time">
-                              {new Date(notif.createdAt).toLocaleString()}
+                              {formatTimeAgo(new Date(notif.createdAt))}
                             </span>
                           </div>
+                          <button 
+                            className="dismiss-btn"
+                            onClick={(e) => handleDismissNotification(e, notif._id)}
+                            title="Dismiss"
+                          >
+                            ✕
+                          </button>
                         </div>
                       ))
                     ) : (
-                      <p className="no-notifications">No notifications</p>
+                      <div className="no-notifications">
+                        <span className="no-notif-icon">🔔</span>
+                        <p>No notifications</p>
+                        <small>You're all caught up!</small>
+                      </div>
                     )}
                   </div>
                   <div className="notification-footer">
                     <Link to="/notifications" onClick={() => setShowNotifications(false)}>
-                      View All Notifications
+                      View All Notifications →
                     </Link>
                   </div>
                 </div>
@@ -129,7 +224,7 @@ const Layout = ({ children }) => {
             </Link>
 
             {/* User Menu */}
-            <div className="user-menu-wrapper">
+            <div className="user-menu-wrapper" ref={userMenuRef}>
               <button className="user-btn" onClick={() => setShowUserMenu(!showUserMenu)}>
                 <span className="user-avatar">{user?.name?.charAt(0) || 'U'}</span>
                 <span className="user-name">{user?.name}</span>
@@ -170,5 +265,16 @@ const Layout = ({ children }) => {
     </div>
   );
 };
+
+// Helper function to format time ago
+function formatTimeAgo(date) {
+  const seconds = Math.floor((new Date() - date) / 1000);
+
+  if (seconds < 60) return 'Just now';
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`;
+  return date.toLocaleDateString();
+}
 
 export default Layout;

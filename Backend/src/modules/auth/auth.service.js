@@ -14,7 +14,8 @@ const notificationService = require('../notification/notification.service');
 
 const MAX_LOGIN_ATTEMPTS = 10;
 const LOCK_DURATION      = 30 * 60 * 1000;    // 30 minutes
-const RESET_COOLDOWN     = 24 * 60 * 60 *1000; // 24 hours
+const RESET_COOLDOWN     = 24 * 60 * 60 * 1000; // 24 hours
+const MAX_RESET_ATTEMPTS = 3;                   // Max 3 reset attempts per day
 
 /**
  * STEP 1: Register & send OTP
@@ -190,7 +191,10 @@ exports.login = async ({ identifier, password }, userContext) => {
       });
     }
     await user.save();
-    await new Promise(r => setTimeout(r, Math.min(5, user.loginAttempts) * 1000));
+    // Progressive delay: 1s, 2s, 4s, 8s, 16s (workplan requirement)
+    const delays = [0, 1000, 2000, 4000, 8000, 16000];
+    const delay = delays[Math.min(user.loginAttempts, delays.length - 1)];
+    await new Promise(r => setTimeout(r, delay));
     throw Object.assign(new Error('Invalid credentials'), { statusCode: 401 });
   }
 
@@ -225,34 +229,48 @@ exports.login = async ({ identifier, password }, userContext) => {
  */
 exports.refreshToken = async ({ refreshToken }) => {
   const sha = hashSha256(refreshToken);
-  const session = await Session.findOne({ sha256Hash: sha, revokedAt: null });
-  if (!session || session.expiresAt < new Date()) {
+  const oldSession = await Session.findOne({ sha256Hash: sha, revokedAt: null });
+  
+  // Validate old session
+  if (!oldSession || oldSession.expiresAt < new Date()) {
     const e = new Error('Invalid refresh token');
     e.statusCode = 401;
     throw e;
   }
-  if (!await compareBcrypt(refreshToken, session.bcryptHash)) {
+  if (!await compareBcrypt(refreshToken, oldSession.bcryptHash)) {
     const e = new Error('Invalid refresh token');
     e.statusCode = 401;
     throw e;
   }
-  // rotate
-  session.revokedAt = new Date();
-  await session.save();
 
+  // Revoke old session
+  oldSession.revokedAt = new Date();
+  await oldSession.save();
+
+  // Create NEW session (proper refresh token rotation)
   const raw = genRandom(40);
   const sha2 = hashSha256(raw);
   const bcryptHash2 = await hashBcrypt(raw);
-  session.sha256Hash = sha2;
-  session.bcryptHash = bcryptHash2;
-  session.expiresAt = new Date(Date.now() + ms(config.REFRESH_TOKEN_EXPIRY));
-  session.revokedAt = null;
-  await session.save();
+  
+  const newSession = new Session({
+    user: oldSession.user,
+    sha256Hash: sha2,
+    bcryptHash: bcryptHash2,
+    ip: oldSession.ip,
+    userAgent: oldSession.userAgent,
+    expiresAt: new Date(Date.now() + ms(config.REFRESH_TOKEN_EXPIRY)),
+    revokedAt: null
+  });
+  await newSession.save();
 
+  // Get user for JWT
+  const user = await User.findById(oldSession.user);
+  
   const accessToken = jwtUtil.sign(
-    { id: session.user, roles: (await User.findById(session.user)).roles },
+    { id: user._id, roles: user.roles },
     { expiresIn: config.JWT_EXPIRY }
   );
+  
   return { accessToken, refreshToken: raw };
 };
 
@@ -290,13 +308,30 @@ exports.forgotPassword = async (identifier, userContext) => {
   
   const email = user.email;
 
+  // Check max 3 reset attempts per day (workplan requirement)
+  const resetAttemptsKey = `reset:attempts:${user._id}`;
+  const attempts = await redis.get(resetAttemptsKey);
+  const attemptCount = attempts ? parseInt(attempts) : 0;
+  
+  if (attemptCount >= MAX_RESET_ATTEMPTS) {
+    const err = new Error('Maximum password reset attempts reached. Please try again in 24 hours.');
+    err.statusCode = 429;
+    throw err;
+  }
+
   // Enforce 24-hour cooldown
   if (user.forgotPasswordRequestedAt &&
-      Date.now() - user.forgotPasswordRequestedAt < RESET_COOLDOWN_MS) {
+      Date.now() - user.forgotPasswordRequestedAt < RESET_COOLDOWN) {
     const err = new Error('Password reset requested too recently. Please wait 24 hours.');
     err.statusCode = 429;
     throw err;
   }
+
+  // Increment attempt counter with 24-hour TTL
+  await redis.multi()
+    .incr(resetAttemptsKey)
+    .expire(resetAttemptsKey, 86400) // 24 hours
+    .exec();
 
   // Update last requested time
   user.forgotPasswordRequestedAt = Date.now();

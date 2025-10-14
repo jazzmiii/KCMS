@@ -22,8 +22,9 @@ const eventService = {
   },
 
   // Change Status
-  changeStatus: async (id, status) => {
-    const response = await api.patch(`/events/${id}/status`, { status });
+  // action: 'submit' | 'approve' | 'publish' | 'start' | 'complete'
+  changeStatus: async (id, action) => {
+    const response = await api.patch(`/events/${id}/status`, { action });
     return response.data;
   },
 
@@ -57,17 +58,11 @@ const eventService = {
     return response.data;
   },
 
-  // Approve Budget Request
-  approveBudget: async (id, budgetId, data) => {
-    const response = await api.patch(`/events/${id}/budget/${budgetId}/approve`, data);
-    return response.data;
-  },
+  // NOTE: Budget approval is handled via BudgetRequest status updates in Backend
+  // There is no separate endpoint for approveBudget - removed as it called non-existent route
 
-  // Submit Post-Event Report
-  submitReport: async (id, data) => {
-    const response = await api.post(`/events/${id}/report`, data);
-    return response.data;
-  },
+  // NOTE: Post-event report submission endpoint doesn't exist in Backend
+  // Removed submitReport() method - endpoint needs to be implemented in Backend first
 };
 
 export default eventService;

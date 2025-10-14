@@ -18,13 +18,43 @@ class ClubService {
 
   // Create a new club
   async createClub(data, logoFile, userContext) {
+    // Import User model for validation
+    const { User } = require('../auth/user.model');
+    
+    // Check if club name already exists
     if (await Club.findOne({ name: data.name })) {
       const err = new Error('Club name already exists');
       err.statusCode = 409;
       throw err;
     }
 
-    // Upload logo if provided
+    // ✅ VALIDATE COORDINATOR: Must be a coordinator role
+    const coordinator = await User.findById(data.coordinator);
+    if (!coordinator) {
+      const err = new Error('Coordinator user not found');
+      err.statusCode = 404;
+      throw err;
+    }
+    if (coordinator.roles?.global !== 'coordinator' && coordinator.roles?.global !== 'admin') {
+      const err = new Error('Coordinator must have coordinator or admin role. Selected user is: ' + coordinator.roles?.global);
+      err.statusCode = 400;
+      throw err;
+    }
+
+    // ✅ VALIDATE PRESIDENT: Must be a student role
+    const president = await User.findById(data.president);
+    if (!president) {
+      const err = new Error('President user not found');
+      err.statusCode = 404;
+      throw err;
+    }
+    if (president.roles?.global !== 'student') {
+      const err = new Error('President must be a student. Selected user is: ' + president.roles?.global);
+      err.statusCode = 400;
+      throw err;
+    }
+
+    // Create the club logo if provided
     let logoUrl = '';
     if (logoFile) {
       const res = await cloudinary.uploader.upload(logoFile.path, {
@@ -37,9 +67,18 @@ class ClubService {
     // Create club document - Admin creates directly as active
     const club = await Club.create({ ...data, logoUrl, status: 'active' });
 
-    // Add core members
+    // ✅ ADD PRESIDENT as club member with president role
+    await Membership.create({
+      club: club._id,
+      user: data.president,
+      role: 'president',
+      status: 'approved'
+    });
+
+    // Add core members (excluding president if already in list)
     if (Array.isArray(data.coreMembers)) {
-      await Promise.all(data.coreMembers.map(userId =>
+      const coreMembers = data.coreMembers.filter(id => id.toString() !== data.president.toString());
+      await Promise.all(coreMembers.map(userId =>
         Membership.create({
           club: club._id,
           user: userId,
@@ -48,18 +87,23 @@ class ClubService {
         })
       ));
     }
-    // Ensure coordinator is president
-    await Membership.findOneAndUpdate(
-      { club: club._id, user: data.coordinator },
-      { role: 'president', status: 'approved' },
-      { upsert: true }
-    );
+    
+    // NOTE: Coordinator is NOT added as a club member
+    // They are assigned via the club.coordinator field for oversight role only
 
-    // Notify coordinator and president about club creation
+    // Notify coordinator about club assignment
     await notificationService.create({
       user: data.coordinator,
       type: 'role_assigned',
       payload: { clubId: club._id, name: club.name, role: 'coordinator' },
+      priority: 'HIGH'
+    });
+
+    // Notify president about club leadership
+    await notificationService.create({
+      user: data.president,
+      type: 'role_assigned',
+      payload: { clubId: club._id, name: club.name, role: 'president' },
       priority: 'HIGH'
     });
 
@@ -78,9 +122,11 @@ class ClubService {
   }
 
   // List active clubs (with Redis caching)
-  async listClubs({ category, search, coordinator, page = 1, limit = 20 }) {
+  async listClubs({ category, search, coordinator, page = 1, limit = 20, _t }) {
     const key = `${CLUB_LIST_CACHE}:${category||'all'}:${search||''}:${coordinator||''}:${page}:${limit}`;
-    const cached = await redis.get(key);
+    
+    // Skip cache if timestamp parameter is provided (cache busting)
+    const cached = _t ? null : await redis.get(key);
     if (cached) return JSON.parse(cached);
 
     const query = { status: 'active' };
@@ -91,23 +137,49 @@ class ClubService {
     const skip = (page - 1) * limit;
     const [total, clubs] = await Promise.all([
       Club.countDocuments(query),
-      Club.find(query).skip(skip).limit(limit).sort({ createdAt: -1 })
+      Club.find(query)
+        .populate('coordinator', 'profile.name email')
+        .skip(skip)
+        .limit(limit)
+        .sort({ createdAt: -1 })
     ]);
 
-    const result = { total, page, limit, clubs };
+    // ✅ ADD MEMBER COUNT to each club
+    const clubsWithCounts = await Promise.all(
+      clubs.map(async (club) => {
+        const clubObj = club.toObject();
+        const memberCount = await Membership.countDocuments({ 
+          club: club._id, 
+          status: 'approved' 
+        });
+        clubObj.memberCount = memberCount;
+        return clubObj;
+      })
+    );
+
+    const result = { total, page, limit, clubs: clubsWithCounts };
+    
     await redis.set(key, JSON.stringify(result), 'EX', 300);
     return result;
   }
 
   // Get club details, include members if scoped
   async getClub(clubId, userContext) {
-    const club = await Club.findById(clubId);
+    const club = await Club.findById(clubId)
+      .populate('coordinator', 'profile.name email roles.global');
     if (!club || club.status !== 'active') {
       const err = new Error('Club not found');
       err.statusCode = 404;
       throw err;
     }
     const data = club.toObject();
+
+    // ✅ ADD MEMBER COUNT
+    const memberCount = await Membership.countDocuments({ 
+      club: clubId, 
+      status: 'approved' 
+    });
+    data.memberCount = memberCount;
 
     // If user is a member, include full member list
     if (userContext) {
@@ -118,9 +190,10 @@ class ClubService {
       });
       if (isMember) {
         data.members = await Membership.find({ club: clubId, status: 'approved' })
-          .populate('user', 'profile.name');
+          .populate('user', 'profile.name rollNumber');
       }
     }
+
     return data;
   }
 
@@ -330,6 +403,23 @@ class ClubService {
 
   // Add member to club
   async addMember(clubId, userId, role, userContext) {
+    // Import User model to check global role
+    const { User } = require('../auth/user.model');
+    
+    // Check user's global role - coordinators and admins cannot be club members
+    const user = await User.findById(userId);
+    if (!user) {
+      const err = new Error('User not found');
+      err.statusCode = 404;
+      throw err;
+    }
+    
+    if (user.roles?.global === 'coordinator' || user.roles?.global === 'admin') {
+      const err = new Error(`${user.roles.global.charAt(0).toUpperCase() + user.roles.global.slice(1)}s cannot be added as club members. They already have system-level access.`);
+      err.statusCode = 400;
+      throw err;
+    }
+    
     // Check if user is already a member
     const existing = await Membership.findOne({ club: clubId, user: userId });
     if (existing) {

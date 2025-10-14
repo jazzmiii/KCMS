@@ -21,12 +21,14 @@ module.exports = function error(err, req, res, next) {
   let details = null;
 
   // Handle different error types
-  if (err.statusCode) {
+  if (err.statusCode && err.statusCode >= 100 && err.statusCode < 600) {
+    // Valid HTTP status code
     statusCode = err.statusCode;
     message = err.message;
     details = err.details;
-  } else if (err.status || err.code) {
-    statusCode = err.status || err.code;
+  } else if (err.status && err.status >= 100 && err.status < 600) {
+    // Valid HTTP status code in .status property
+    statusCode = err.status;
     message = err.message || message;
     details = err.details;
   } else if (err.name === 'ValidationError') {
@@ -42,10 +44,22 @@ module.exports = function error(err, req, res, next) {
   } else if (err.name === 'TokenExpiredError') {
     statusCode = 401;
     message = 'Token expired';
-  } else if (err.name === 'MongoError' && err.code === 11000) {
-    statusCode = 409;
-    message = 'Duplicate entry';
-    details = { field: Object.keys(err.keyPattern)[0] };
+  } else if (err.name === 'MongoError' || err.name === 'MongoServerError') {
+    // Handle MongoDB errors
+    if (err.code === 11000) {
+      statusCode = 409;
+      message = 'Duplicate entry';
+      details = { field: Object.keys(err.keyPattern || {})[0] };
+    } else if (err.code === 27) {
+      // IndexNotFound - text index required
+      statusCode = 500;
+      message = 'Search index not configured';
+      details = { mongoError: err.codeName };
+    } else {
+      statusCode = 500;
+      message = err.message || 'Database error';
+      details = { mongoError: err.codeName, code: err.code };
+    }
   }
 
   // Log error for debugging (except in test environment)

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import Layout from '../../components/Layout';
 import { useAuth } from '../../context/AuthContext';
-import api from '../../services/api';
+import reportService from '../../services/reportService';
+import clubService from '../../services/clubService';
 import { 
   FaFileDownload, 
   FaChartBar, 
@@ -44,8 +45,8 @@ function ReportsPage() {
   const fetchDashboardStats = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/reports/dashboard');
-      setDashboardStats(response.data.data);
+      const response = await reportService.getDashboard();
+      setDashboardStats(response.data);
       setError(null);
     } catch (err) {
       console.error('Error fetching dashboard stats:', err);
@@ -58,10 +59,8 @@ function ReportsPage() {
   const fetchAuditLogs = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/reports/audit-logs', {
-        params: { limit: 50, page: 1 }
-      });
-      setAuditLogs(response.data.data.items || []);
+      const response = await reportService.getAuditLogs({ limit: 50, page: 1 });
+      setAuditLogs(response.data.items || []);
       setError(null);
     } catch (err) {
       console.error('Error fetching audit logs:', err);
@@ -73,8 +72,9 @@ function ReportsPage() {
 
   const fetchClubs = async () => {
     try {
-      const response = await api.get('/clubs');
-      setClubs(response.data.data.items || []);
+      const response = await clubService.listClubs();
+      // Backend: successResponse(res, { total, clubs }) → { status, data: { total, clubs } }
+      setClubs(response.data?.clubs || []);
     } catch (err) {
       console.error('Error fetching clubs:', err);
     }
@@ -88,20 +88,10 @@ function ReportsPage() {
 
     try {
       setLoading(true);
-      const response = await api.post(
-        `/reports/clubs/${selectedClub}/activity/${clubActivityYear}`,
-        {},
-        { responseType: 'blob' }
-      );
+      const response = await reportService.generateClubActivityReport(selectedClub, clubActivityYear);
 
-      // Download the file
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `club-activity-${clubActivityYear}.pdf`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
+      // Download the file using helper
+      reportService.downloadBlob(response.data, `club-activity-${clubActivityYear}.pdf`);
       
       alert('Report generated successfully!');
     } catch (err) {
@@ -115,19 +105,9 @@ function ReportsPage() {
   const generateNAACReport = async () => {
     try {
       setLoading(true);
-      const response = await api.post(
-        `/reports/naac/${naacYear}`,
-        {},
-        { responseType: 'blob' }
-      );
+      const response = await reportService.generateNAACReport(naacYear);
 
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `NAAC-Report-${naacYear}.pdf`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
+      reportService.downloadBlob(response.data, `NAAC-Report-${naacYear}.pdf`);
       
       alert('NAAC Report generated successfully!');
     } catch (err) {
@@ -141,19 +121,9 @@ function ReportsPage() {
   const generateAnnualReport = async () => {
     try {
       setLoading(true);
-      const response = await api.post(
-        `/reports/annual/${annualYear}`,
-        {},
-        { responseType: 'blob' }
-      );
+      const response = await reportService.generateAnnualReport(annualYear);
 
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `Annual-Report-${annualYear}.pdf`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
+      reportService.downloadBlob(response.data, `Annual-Report-${annualYear}.pdf`);
       
       alert('Annual Report generated successfully!');
     } catch (err) {
@@ -167,18 +137,10 @@ function ReportsPage() {
   const downloadClubActivityExcel = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/reports/club-activity', {
-        params: { format: 'excel' },
-        responseType: 'blob'
-      });
+      const response = await reportService.getClubActivity({ format: 'excel' });
 
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `club-activity-report.xlsx`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
+      // Note: This needs to be updated in Backend to return blob for Excel format
+      reportService.downloadBlob(response.data, `club-activity-report.xlsx`);
     } catch (err) {
       console.error('Error downloading Excel:', err);
       alert('Failed to download Excel report');

@@ -10,12 +10,14 @@ const authRoutes = require('./modules/auth/auth.routes');
 const userRoutes = require('./modules/user/user.routes');
 const clubRoutes = require('./modules/club/club.routes');
 const eventRoutes = require('./modules/event/event.routes');
+const eventRegistrationRoutes = require('./modules/event/eventRegistration.routes');
 const documentRoutes = require('./modules/document/document.routes');
 const recruitmentRoutes = require('./modules/recruitment/recruitment.routes');
 const notificationRoutes = require('./modules/notification/notification.routes');
 const reportRoutes = require('./modules/reports/report.routes');
 const searchRoutes = require('./modules/search/search.routes');
 const adminRoutes = require('./modules/admin/admin.routes');
+const settingsRoutes = require('./modules/settings/settings.routes');
 
 const error = require('./middlewares/error');
 const { maintenanceMode } = require('./middlewares/maintenance');
@@ -70,12 +72,14 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/clubs', clubRoutes);
 app.use('/api/events', eventRoutes);
+app.use('/api', eventRegistrationRoutes); // Event registration routes
 app.use('/api/documents', documentRoutes);
 app.use('/api/recruitments', recruitmentRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/settings', settingsRoutes);
 
 // 404
 app.use((req, res) => res.status(404).json({ message: 'Not Found' }));

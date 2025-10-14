@@ -4,9 +4,28 @@ const notificationQueue    = require('../../queues/notification.queue');
 class NotificationService {
   /**
    * Create & enqueue a notification.
+   * Includes deduplication to prevent duplicate notifications within 1 hour.
    * @param {Object} opts: { user, type, payload, priority }
    */
   async create({ user, type, payload = {}, priority = 'MEDIUM' }) {
+    // Deduplication: Check for similar notification created in last hour
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    
+    const existingNotif = await Notification.findOne({
+      user,
+      type,
+      createdAt: { $gte: oneHourAgo },
+      // For role_assigned, also check if payload is similar
+      ...(type === 'role_assigned' && payload.role ? { 'payload.role': payload.role } : {})
+    }).sort({ createdAt: -1 });
+
+    // If duplicate found within last hour, return existing instead of creating new
+    if (existingNotif) {
+      console.log(`[Notification] Duplicate prevented: ${type} for user ${user}`);
+      return existingNotif;
+    }
+
+    // Create new notification
     const notif = await Notification.create({ user, type, payload, priority });
     if (!notificationQueue || typeof notificationQueue.add !== 'function') {
       console.error('notificationQueue is not properly initialized:', notificationQueue);

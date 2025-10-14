@@ -15,13 +15,16 @@ module.exports = {
     description: Joi.string().min(50).max(500).required(),
     vision: Joi.string().max(500).required(),
     mission: Joi.string().max(500).required(),
-    coordinator: objectId.required(),
+    coordinator: objectId.required(),  // Faculty coordinator (oversight role)
+    president: objectId.required(),    // Student president (leadership role)
     coreMembers: Joi.array().items(objectId).optional()
   }),
 
   listClubsSchema: Joi.object({
     category: Joi.string().valid('technical','cultural','sports','arts','social'),
     search: Joi.string().allow(''),
+    coordinator: objectId.optional(),  // ✅ Allow filtering by coordinator
+    _t: Joi.number().optional(),       // ✅ Allow cache-busting timestamp
     page: Joi.number().integer().min(1).default(1),
     limit: Joi.number().integer().min(1).max(100).default(20)
   }),

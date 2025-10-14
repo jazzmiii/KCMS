@@ -72,7 +72,7 @@ class UserService {
 
   // Get my clubs
   async getMyClubs(userId, roleFilter) {
-    const user = await User.findById(userId).populate('roles.scoped.club', 'name category logo');
+    const user = await User.findById(userId).populate('roles.scoped.club', 'name category logoUrl');
     if (!user) throw Object.assign(new Error('User not found'), { statusCode: 404 });
     
     let clubs = user.roles?.scoped || [];
@@ -82,9 +82,30 @@ class UserService {
       clubs = clubs.filter(sc => sc.role === roleFilter);
     }
     
+    // ✅ If user is a coordinator, also include clubs they coordinate
+    if (user.roles?.global === 'coordinator') {
+      const { Club } = require('../club/club.model');
+      const coordinatedClubs = await Club.find({ 
+        coordinator: userId,
+        status: 'active' 
+      }).select('name category logoUrl');
+      
+      // Add coordinated clubs to the list
+      coordinatedClubs.forEach(club => {
+        // Don't duplicate if already in scoped clubs
+        const exists = clubs.some(sc => sc.club?._id?.toString() === club._id.toString());
+        if (!exists) {
+          clubs.push({
+            club: club,
+            role: 'coordinator'
+          });
+        }
+      });
+    }
+    
     return clubs.map(sc => ({
       club: sc.club,
-      role: sc.role
+      role: sc.role  // member | core | vicePresident | secretary | treasurer | leadPR | leadTech | president
     }));
   }
 
@@ -149,6 +170,27 @@ class UserService {
     const oldRole = user.roles.global;
     user.roles.global = globalRole;
     await user.save();
+    
+    // If promoted to coordinator or admin, remove all club memberships
+    // (coordinators/admins have system-level access, shouldn't be club members)
+    if ((globalRole === 'coordinator' || globalRole === 'admin') && oldRole === 'student') {
+      const { Membership } = require('../club/membership.model');
+      const removedMemberships = await Membership.find({ user: id });
+      await Membership.deleteMany({ user: id });
+      
+      // Log membership removals
+      if (removedMemberships.length > 0) {
+        await auditService.log({
+          user: userContext.id,
+          action: 'MEMBERSHIPS_REMOVED',
+          target: `User:${id}`,
+          oldValue: JSON.stringify(removedMemberships.map(m => ({ club: m.club, role: m.role }))),
+          newValue: `Removed ${removedMemberships.length} club membership(s) due to promotion to ${globalRole}`,
+          ip: userContext.ip,
+          userAgent: userContext.userAgent
+        });
+      }
+    }
 
     await auditService.log({
       user: userContext.id,
@@ -193,6 +235,30 @@ class UserService {
     });
 
     return user;
+  }
+
+  // 8b) Admin: permanently delete user
+  async deleteUser(id, userContext) {
+    const user = await User.findById(id);
+    if (!user) throw Object.assign(new Error('User not found'), { statusCode: 404 });
+    
+    const userEmail = user.email;
+    const userName = user.profile?.name || 'Unknown';
+
+    // Log audit BEFORE deletion
+    await auditService.log({
+      user: userContext.id,
+      action: 'USER_DELETE',
+      target: `User:${id}`,
+      oldValue: JSON.stringify({ email: userEmail, name: userName }),
+      ip: userContext.ip,
+      userAgent: userContext.userAgent
+    });
+
+    // Permanently delete from database
+    await User.findByIdAndDelete(id);
+
+    return { email: userEmail, name: userName };
   }
 
   // 9) Self: upload profile photo

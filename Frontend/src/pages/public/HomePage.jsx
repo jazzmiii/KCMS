@@ -27,10 +27,10 @@ const HomePage = () => {
         // Note: No authentication needed for public view
       });
       console.log('Fetched PUBLIC clubs:', response.data);
-      setClubs(response.data.clubs || []);
+      setClubs(response.data?.data?.clubs || []);
       setStats(prev => ({
         ...prev,
-        activeClubs: response.data.total || 0
+        activeClubs: response.data?.data?.total || 0
       }));
     } catch (error) {
       console.error('Error fetching clubs:', error);

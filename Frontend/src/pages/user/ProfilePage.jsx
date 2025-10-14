@@ -298,17 +298,15 @@ const ProfilePage = () => {
             </div>
           )}
 
-          {profile?.clubRoles && profile.clubRoles.length > 0 && (
+          {profile?.roles?.scoped && profile.roles.scoped.length > 0 && (
             <div className="profile-card">
               <h3>My Club Roles</h3>
               <div className="club-roles-list">
-                {profile.clubRoles.map((clubRole, index) => (
+                {profile.roles.scoped.map((scopedRole, index) => (
                   <div key={index} className="club-role-item">
-                    <span className="club-name">{clubRole.clubId?.name || 'Unknown Club'}</span>
+                    <span className="club-name">{scopedRole.club?.name || 'Unknown Club'}</span>
                     <div className="role-badges">
-                      {clubRole.roles.map((role, idx) => (
-                        <span key={idx} className="badge badge-info">{role}</span>
-                      ))}
+                      <span className="badge badge-info">{scopedRole.role}</span>
                     </div>
                   </div>
                 ))}

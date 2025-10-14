@@ -40,10 +40,10 @@ const CreateEventPage = () => {
   const fetchMyClubs = async () => {
     try {
       const response = await clubService.listClubs();
-      const managedClubs = response.data.clubs?.filter(club => 
-        user?.clubRoles?.some(cr => 
-          cr.clubId === club._id && 
-          (cr.roles.includes('president') || cr.roles.includes('core'))
+      const managedClubs = response.data?.data?.clubs?.filter(club => 
+        user?.roles?.scoped?.some(cr => 
+          cr.club?.toString() === club._id?.toString() && 
+          (cr.role === 'president' || cr.role === 'core')
         )
       ) || [];
       setMyClubs(managedClubs);

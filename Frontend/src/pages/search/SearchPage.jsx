@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import Layout from '../../components/Layout';
-import api from '../../services/api';
+import searchService from '../../services/searchService';
 import { FaSearch, FaUsers, FaBuilding, FaCalendarAlt, FaFile } from 'react-icons/fa';
 import '../../styles/Search.css';
 
@@ -22,11 +22,9 @@ function SearchPage() {
   const performSearch = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/search', {
-        params: { q: query, limit: 20 }
-      });
+      const response = await searchService.globalSearch(query, { limit: 20 });
       
-      setResults(response.data.data || { clubs: [], events: [], users: [], documents: [] });
+      setResults(response.data || { clubs: [], events: [], users: [], documents: [] });
     } catch (err) {
       console.error('Search error:', err);
     } finally {

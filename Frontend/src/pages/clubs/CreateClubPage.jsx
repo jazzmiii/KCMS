@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../../components/Layout';
 import clubService from '../../services/clubService';
+import userService from '../../services/userService';
 import '../../styles/Forms.css';
 
 const CreateClubPage = () => {
@@ -13,12 +14,45 @@ const CreateClubPage = () => {
     vision: '',
     mission: '',
     coordinator: '',
+    president: '',
   });
   const [logo, setLogo] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [coordinators, setCoordinators] = useState([]);
+  const [students, setStudents] = useState([]);
+  const [loadingUsers, setLoadingUsers] = useState(true);
 
   const categories = ['technical', 'cultural', 'sports', 'arts', 'social'];
+
+  // Fetch coordinators and students on component mount
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  const fetchUsers = async () => {
+    setLoadingUsers(true);
+    try {
+      // Fetch coordinators and students separately
+      const [coordResponse, studentResponse] = await Promise.all([
+        userService.listUsers({ role: 'coordinator', limit: 100 }),
+        userService.listUsers({ role: 'student', limit: 100 })
+      ]);
+
+      setCoordinators(coordResponse.data?.users || []);
+      setStudents(studentResponse.data?.users || []);
+      
+      console.log('✅ Loaded users:', {
+        coordinators: coordResponse.data?.users?.length || 0,
+        students: studentResponse.data?.users?.length || 0
+      });
+    } catch (err) {
+      console.error('Error fetching users:', err);
+      setError('Failed to load users. Please refresh the page.');
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
 
   const handleChange = (e) => {
     setFormData({
@@ -149,18 +183,50 @@ const CreateClubPage = () => {
             </div>
 
             <div className="form-group">
-              <label htmlFor="coordinator">Coordinator ID *</label>
-              <input
-                type="text"
+              <label htmlFor="coordinator">Faculty Coordinator *</label>
+              <select
                 id="coordinator"
                 name="coordinator"
                 value={formData.coordinator}
                 onChange={handleChange}
-                placeholder="Enter coordinator user ID"
                 required
-              />
+                disabled={loadingUsers}
+              >
+                <option value="">
+                  {loadingUsers ? 'Loading coordinators...' : '-- Select Faculty Coordinator --'}
+                </option>
+                {coordinators.map((coord) => (
+                  <option key={coord._id} value={coord._id}>
+                    {coord.profile?.name || 'No Name'} ({coord.email}) - {coord.profile?.department || 'N/A'}
+                  </option>
+                ))}
+              </select>
               <small className="form-hint">
-                Faculty member who will coordinate this club
+                Faculty member who will oversee this club (must have coordinator role)
+              </small>
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="president">Club President *</label>
+              <select
+                id="president"
+                name="president"
+                value={formData.president}
+                onChange={handleChange}
+                required
+                disabled={loadingUsers}
+              >
+                <option value="">
+                  {loadingUsers ? 'Loading students...' : '-- Select Club President --'}
+                </option>
+                {students.map((student) => (
+                  <option key={student._id} value={student._id}>
+                    {student.rollNumber} - {student.profile?.name || 'No Name'} ({student.profile?.year || 'N/A'} Year)
+                  </option>
+                ))}
+              </select>
+              <small className="form-hint">
+                Student who will lead this club (must have student role)
               </small>
             </div>
 

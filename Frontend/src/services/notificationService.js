@@ -8,8 +8,8 @@ const notificationService = {
   },
 
   // Mark as Read
-  markRead: async (id, read = true) => {
-    const response = await api.patch(`/notifications/${id}/read`, { read });
+  markRead: async (id, isRead = true) => {
+    const response = await api.patch(`/notifications/${id}/read`, { isRead });
     return response.data;
   },
 

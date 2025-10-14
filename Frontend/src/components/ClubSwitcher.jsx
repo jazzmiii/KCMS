@@ -26,14 +26,18 @@ const ClubSwitcher = () => {
     }
   };
 
-  const handleClubSelect = (club) => {
+  const handleClubSelect = (clubData) => {
     // Management roles go to dashboard, regular members go to public page
-    const managementRoles = ['core', 'president', 'vicePresident', 'secretary', 'treasurer', 'leadPR', 'leadTech'];
+    const managementRoles = ['core', 'president', 'coordinator'];
     
-    if (managementRoles.includes(club.userRole)) {
-      navigate(`/clubs/${club._id}/dashboard`);
+    // Handle both old and new API response formats
+    const clubId = clubData.club?._id || clubData._id;
+    const role = clubData.role || clubData.userRole;
+    
+    if (managementRoles.includes(role)) {
+      navigate(`/clubs/${clubId}/dashboard`);
     } else {
-      navigate(`/clubs/${club._id}`);
+      navigate(`/clubs/${clubId}`);
     }
     setIsOpen(false);
   };
