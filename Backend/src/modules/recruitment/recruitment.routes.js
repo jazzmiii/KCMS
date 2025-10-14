@@ -73,7 +73,7 @@ router.patch(
   '/:id/applications/:appId',
   authenticate,
   requireEither(['admin'], ['core', 'president']), // Admin OR Club Core+
-  validate(v.recruitmentId, 'params'),
+  validate(v.recruitmentIdAndAppId, 'params'),
   validate(v.reviewSchema),
   ctrl.review
 );

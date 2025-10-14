@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import Layout from '../../components/Layout';
 import clubService from '../../services/clubService';
+import { getClubLogoUrl, getClubLogoPlaceholder } from '../../utils/imageUtils';
 import '../../styles/Clubs.css';
 
 const ClubsPage = () => {
@@ -105,11 +106,11 @@ const ClubsPage = () => {
               <div key={club._id} className="club-card">
                 <div className="club-card-header">
                   <div className="club-logo">
-                    {club.logo ? (
-                      <img src={club.logo} alt={club.name} />
+                    {getClubLogoUrl(club) ? (
+                      <img src={getClubLogoUrl(club)} alt={club.name} />
                     ) : (
                       <div className="club-logo-placeholder">
-                        {club.name.charAt(0)}
+                        {getClubLogoPlaceholder(club)}
                       </div>
                     )}
                   </div>

@@ -22,4 +22,36 @@ function hasScopedRole(user, clubId, allowed = []) {
   );
 }
 
-module.exports = { hasGlobalRole, hasScopedRole };
+/**
+ * Check if user has club role via Membership collection (SINGLE SOURCE OF TRUTH)
+ * This is the CORRECT way since User.roles.scoped is not always synced
+ * @param {string} userId - User ID
+ * @param {string} clubId - Club ID
+ * @param {string[]} allowed - Array of allowed roles
+ * @returns {Promise<boolean>}
+ */
+async function hasClubMembership(userId, clubId, allowed = []) {
+  if (!userId || !clubId) return false;
+  
+  try {
+    const { Membership } = require('../modules/club/membership.model');
+    const membership = await Membership.findOne({
+      user: userId,
+      club: clubId,
+      status: 'approved'
+    });
+    
+    if (!membership) return false;
+    
+    // If no specific roles required, any approved membership is OK
+    if (allowed.length === 0) return true;
+    
+    // Check if user's role matches any of the allowed roles
+    return allowed.includes(membership.role);
+  } catch (error) {
+    console.error('Error checking club membership:', error);
+    return false;
+  }
+}
+
+module.exports = { hasGlobalRole, hasScopedRole, hasClubMembership };

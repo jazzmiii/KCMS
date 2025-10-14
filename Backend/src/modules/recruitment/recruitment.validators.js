@@ -45,6 +45,11 @@ module.exports = {
     id: objectId.required()
   }),
 
+  recruitmentIdAndAppId: Joi.object({
+    id: objectId.required(),
+    appId: objectId.required()
+  }),
+
   applySchema: Joi.object({
     answers: Joi.array()
       .items(

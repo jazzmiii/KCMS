@@ -4,8 +4,9 @@ import { useAuth } from '../../context/AuthContext';
 import Layout from '../../components/Layout';
 import clubService from '../../services/clubService';
 import eventService from '../../services/eventService';
-import recruitmentService from '../../services/recruitmentService';
 import userService from '../../services/userService';
+import recruitmentService from '../../services/recruitmentService';
+import { getClubLogoUrl, getClubLogoPlaceholder } from '../../utils/imageUtils';
 import '../../styles/ClubDashboard.css';
 
 const ClubDashboard = () => {
@@ -211,11 +212,11 @@ const ClubDashboard = () => {
         <div className="club-dashboard-header">
           <div className="club-header-content">
             <div className="club-logo-container">
-              {club.logo ? (
-                <img src={club.logo} alt={club.name} className="club-logo" />
+              {getClubLogoUrl(club) ? (
+                <img src={getClubLogoUrl(club)} alt={club.name} className="club-logo" />
               ) : (
                 <div className="club-logo-placeholder">
-                  {club.name.charAt(0)}
+                  {getClubLogoPlaceholder(club)}
                 </div>
               )}
             </div>

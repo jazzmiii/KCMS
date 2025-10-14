@@ -6,16 +6,19 @@ import clubService from '../../services/clubService';
 import eventService from '../../services/eventService';
 import recruitmentService from '../../services/recruitmentService';
 import userService from '../../services/userService';
+import { getClubLogoUrl, getClubLogoPlaceholder } from '../../utils/imageUtils';
 import '../../styles/Dashboard.css';
 
 const StudentDashboard = () => {
   const { user } = useAuth();
   const [stats, setStats] = useState({
-    totalClubs: 0,
+    myClubsCount: 0,
+    activeClubs: 0,
     upcomingEvents: 0,
     openRecruitments: 0,
   });
-  const [clubs, setClubs] = useState([]);
+  const [allClubs, setAllClubs] = useState([]);
+  const [myClubsList, setMyClubsList] = useState([]);
   const [upcomingEvents, setUpcomingEvents] = useState([]);
   const [openRecruitments, setOpenRecruitments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -28,22 +31,30 @@ const StudentDashboard = () => {
     try {
       // Add timestamp to bypass stale cache
       const timestamp = Date.now();
-      const [clubsRes, eventsRes, recruitmentsRes] = await Promise.all([
-        clubService.listClubs({ limit: 6, status: 'active', _t: timestamp }), // Get all active clubs (preview)
+      const [myClubsRes, allClubsRes, eventsRes, recruitmentsRes] = await Promise.all([
+        userService.getMyClubs(), // Get student's clubs (where they are member/core/president)
+        clubService.listClubs({ limit: 8, status: 'active', _t: timestamp }), // Get all active clubs
         eventService.list({ limit: 10, status: 'published' }),
         recruitmentService.list({ limit: 5, status: 'open' }),
       ]);
 
-      // Backend: successResponse(res, { total, clubs }) → { status, data: { total, clubs } }
-      const allClubs = clubsRes.data?.clubs || [];
-      setClubs(allClubs);
-      // Backend: successResponse(res, { total, events }) → { status, data: { total, events } }
+      // Backend: successResponse(res, { clubs }) → { data: { clubs: [{ club, role }] } }
+      const studentClubs = myClubsRes.data?.clubs || [];
+      setMyClubsList(studentClubs);
+      
+      // Backend: successResponse(res, { total, clubs }) → { data: { total, clubs } }
+      const activeClubs = allClubsRes.data?.clubs || [];
+      setAllClubs(activeClubs);
+      
+      // Backend: successResponse(res, { total, events }) → { data: { total, events } }
       setUpcomingEvents(eventsRes.data?.events || []);
-      // Backend: successResponse(res, { total, items }) → { status, data: { total, items } }
+      
+      // Backend: successResponse(res, { total, items }) → { data: { total, items } }
       setOpenRecruitments(recruitmentsRes.data?.items || []);
 
       setStats({
-        totalClubs: clubsRes.data?.total || allClubs.length,
+        myClubsCount: studentClubs.length,
+        activeClubs: allClubsRes.data?.total || 0, // Use total from backend (13), not array length (8)
         upcomingEvents: eventsRes.data?.total || 0,
         openRecruitments: recruitmentsRes.data?.total || 0,
       });
@@ -69,8 +80,9 @@ const StudentDashboard = () => {
           <div className="stat-card">
             <div className="stat-icon">🎯</div>
             <div className="stat-content">
-              <h3>{stats.totalClubs}</h3>
-              <p>Total Clubs</p>
+              <h3>{stats.myClubsCount}/3</h3>
+              <p>My Clubs</p>
+              {stats.myClubsCount >= 3 && <small style={{ color: '#f59e0b' }}>Maximum reached</small>}
             </div>
           </div>
           <div className="stat-card">
@@ -85,6 +97,13 @@ const StudentDashboard = () => {
             <div className="stat-content">
               <h3>{stats.openRecruitments}</h3>
               <p>Open Recruitments</p>
+            </div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-icon">🏛️</div>
+            <div className="stat-content">
+              <h3>{stats.activeClubs}</h3>
+              <p>Active Clubs</p>
             </div>
           </div>
         </div>
@@ -184,23 +203,69 @@ const StudentDashboard = () => {
           )}
         </div>
 
-        {/* Clubs */}
+        {/* My Clubs */}
         <div className="dashboard-section">
           <div className="section-header">
-            <h2>🎯 Clubs</h2>
+            <h2>🎯 My Clubs ({myClubsList.length}/3)</h2>
+            {myClubsList.length < 3 && (
+              <Link to="/recruitments" className="view-all">Join More Clubs →</Link>
+            )}
+          </div>
+          {loading ? (
+            <div className="loading">Loading...</div>
+          ) : myClubsList.length > 0 ? (
+            <div className="clubs-grid">
+              {myClubsList.map((membership) => (
+                <div key={membership.club._id} className="club-card-small" style={{ border: '2px solid #4f46e5' }}>
+                  <div className="club-logo-small">
+                    {getClubLogoUrl(membership.club) ? (
+                      <img src={getClubLogoUrl(membership.club)} alt={membership.club.name} />
+                    ) : (
+                      <div className="club-logo-placeholder">{getClubLogoPlaceholder(membership.club)}</div>
+                    )}
+                  </div>
+                  <div className="club-info">
+                    <h3>{membership.club.name}</h3>
+                    <span className="club-category">{membership.club.category}</span>
+                    <span className={`badge ${
+                      membership.role === 'president' ? 'badge-danger' : 
+                      membership.role === 'core' || membership.role.includes('lead') ? 'badge-warning' : 
+                      'badge-info'
+                    }`} style={{ marginTop: '4px', textTransform: 'capitalize' }}>
+                      {membership.role}
+                    </span>
+                  </div>
+                  <Link to={`/clubs/${membership.club._id}/dashboard`} className="btn btn-primary btn-sm">
+                    Dashboard
+                  </Link>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="no-data">
+              <p>You haven't joined any clubs yet.</p>
+              <Link to="/recruitments" className="btn btn-primary">Apply to Clubs</Link>
+            </div>
+          )}
+        </div>
+
+        {/* Explore All Clubs */}
+        <div className="dashboard-section">
+          <div className="section-header">
+            <h2>🔍 Explore Clubs</h2>
             <Link to="/clubs" className="view-all">View All →</Link>
           </div>
           {loading ? (
             <div className="loading">Loading...</div>
-          ) : clubs.length > 0 ? (
+          ) : allClubs.length > 0 ? (
             <div className="clubs-grid">
-              {clubs.map((club) => (
+              {allClubs.map((club) => (
                 <div key={club._id} className="club-card-small">
                   <div className="club-logo-small">
-                    {club.logo ? (
-                      <img src={club.logo} alt={club.name} />
+                    {getClubLogoUrl(club) ? (
+                      <img src={getClubLogoUrl(club)} alt={club.name} />
                     ) : (
-                      <div className="club-logo-placeholder">{club.name.charAt(0)}</div>
+                      <div className="club-logo-placeholder">{getClubLogoPlaceholder(club)}</div>
                     )}
                   </div>
                   <div className="club-info">
@@ -208,13 +273,13 @@ const StudentDashboard = () => {
                     <span className="club-category">{club.category}</span>
                   </div>
                   <Link to={`/clubs/${club._id}`} className="btn btn-outline btn-sm">
-                    View
+                    View Details
                   </Link>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="no-data">No clubs found</p>
+            <p className="no-data">No clubs available</p>
           )}
         </div>
       </div>

@@ -100,8 +100,7 @@ router.patch(
   '/:clubId/members/:memberId',
   authenticate,
   requirePresident(), // ✅ Admin OR ONLY Club President
-  validate(v.clubId, 'params'),
-  validate(v.memberId, 'params'),
+  validate(v.clubIdAndMemberId, 'params'),
   validate(v.updateMemberRoleSchema),
   ctrl.updateMemberRole
 );
@@ -111,8 +110,7 @@ router.delete(
   '/:clubId/members/:memberId',
   authenticate,
   requirePresident(), // ✅ Admin OR ONLY Club President
-  validate(v.clubId, 'params'),
-  validate(v.memberId, 'params'),
+  validate(v.clubIdAndMemberId, 'params'),
   ctrl.removeMember
 );
 

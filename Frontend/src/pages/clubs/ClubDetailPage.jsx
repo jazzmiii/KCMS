@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import Layout from '../../components/Layout';
 import clubService from '../../services/clubService';
 import eventService from '../../services/eventService';
+import { getClubLogoUrl, getClubLogoPlaceholder } from '../../utils/imageUtils';
 import '../../styles/Clubs.css';
 
 const ClubDetailPage = () => {
@@ -72,11 +73,11 @@ const ClubDetailPage = () => {
         <div className="club-header">
           <div className="club-header-content">
             <div className="club-logo-large">
-              {club.logo ? (
-                <img src={club.logo} alt={club.name} />
+              {getClubLogoUrl(club) ? (
+                <img src={getClubLogoUrl(club)} alt={club.name} />
               ) : (
                 <div className="club-logo-placeholder-large">
-                  {club.name.charAt(0)}
+                  {getClubLogoPlaceholder(club)}
                 </div>
               )}
             </div>

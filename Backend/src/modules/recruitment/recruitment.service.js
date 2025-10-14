@@ -147,6 +147,19 @@ class RecruitmentService {
       throw Object.assign(new Error('Already applied'), { statusCode: 400 });
     }
 
+    // ✅ Check if student already has 3 approved club memberships
+    const approvedMembershipsCount = await Membership.countDocuments({
+      user: userId,
+      status: 'approved'
+    });
+
+    if (approvedMembershipsCount >= 3) {
+      throw Object.assign(
+        new Error('You are already a member of 3 clubs. Maximum club limit reached.'),
+        { statusCode: 400 }
+      );
+    }
+
     const app = await Application.create({ recruitment: id, user: userId, answers });
 
     await auditService.log({

@@ -5,6 +5,7 @@ import Layout from '../../components/Layout';
 import userService from '../../services/userService';
 import eventService from '../../services/eventService';
 import recruitmentService from '../../services/recruitmentService';
+import { getClubLogoUrl, getClubLogoPlaceholder } from '../../utils/imageUtils';
 import '../../styles/Dashboard.css';
 
 const CoreDashboard = () => {
@@ -155,10 +156,10 @@ const CoreDashboard = () => {
               {myClubs.map((club) => (
                 <div key={club._id} className="club-card">
                   <div className="club-logo">
-                    {club.logoUrl ? (
-                      <img src={club.logoUrl} alt={club.name} />
+                    {getClubLogoUrl(club) ? (
+                      <img src={getClubLogoUrl(club)} alt={club.name} />
                     ) : (
-                      <div className="club-logo-placeholder">{club.name.charAt(0)}</div>
+                      <div className="club-logo-placeholder">{getClubLogoPlaceholder(club)}</div>
                     )}
                   </div>
                   <h3>{club.name}</h3>

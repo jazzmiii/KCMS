@@ -1,4 +1,4 @@
-const { hasGlobalRole, hasScopedRole } = require('../utils/rbac');
+const { hasGlobalRole, hasScopedRole, hasClubMembership } = require('../utils/rbac');
 const { errorResponse } = require('../utils/response');
 
 function normalizeRole(r) {
@@ -258,10 +258,11 @@ exports.requireAdminOrCoordinatorOrClubRole = (clubRoles = [], clubParam = 'club
       }
     }
 
-    // Check club roles
+    // ✅ FIXED: Check club roles via Membership collection (SINGLE SOURCE OF TRUTH)
+    // This is the proper way since User.roles.scoped is not always synced
     if (clubRoles.length > 0) {
-      const hasClubRole = checkScopedRole(req.user, clubId, clubRoles);
-      if (hasClubRole) {
+      const hasMembership = await hasClubMembership(req.user.id, clubId, clubRoles);
+      if (hasMembership) {
         return next();
       }
     }

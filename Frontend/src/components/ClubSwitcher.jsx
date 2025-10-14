@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import userService from '../services/userService';
+import { getClubLogoUrl, getClubLogoPlaceholder } from '../utils/imageUtils';
 import '../styles/ClubSwitcher.css';
 
 const ClubSwitcher = () => {
@@ -75,10 +76,10 @@ const ClubSwitcher = () => {
                   onClick={() => handleClubSelect(club)}
                 >
                   <div className="club-logo">
-                    {club.logoUrl ? (
-                      <img src={club.logoUrl} alt={club.name} />
+                    {getClubLogoUrl(club) ? (
+                      <img src={getClubLogoUrl(club)} alt={club.name} />
                     ) : (
-                      <div className="logo-placeholder">{club.name.charAt(0)}</div>
+                      <div className="logo-placeholder">{getClubLogoPlaceholder(club)}</div>
                     )}
                   </div>
                   <div className="club-info">

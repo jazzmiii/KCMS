@@ -70,6 +70,11 @@ module.exports = {
     memberId: objectId.required()
   }),
 
+  clubIdAndMemberId: Joi.object({
+    clubId: objectId.required(),
+    memberId: objectId.required()
+  }),
+
   addMemberSchema: Joi.object({
     userId: objectId.required(),
     role: Joi.string().valid('member','core','president','vicePresident','secretary','treasurer','leadPR','leadTech').required()

@@ -70,17 +70,39 @@ class UserService {
     });
   }
 
-  // Get my clubs
+  // Get my clubs - ✅ IMPROVED: Query Membership collection directly
   async getMyClubs(userId, roleFilter) {
-    const user = await User.findById(userId).populate('roles.scoped.club', 'name category logoUrl');
+    const user = await User.findById(userId);
     if (!user) throw Object.assign(new Error('User not found'), { statusCode: 404 });
     
-    let clubs = user.roles?.scoped || [];
+    // ✅ SINGLE SOURCE OF TRUTH: Query Membership collection
+    const { Membership } = require('../club/membership.model');
+    const query = { 
+      user: userId, 
+      status: 'approved' // Only approved memberships
+    };
     
     // Filter by specific club role if requested
     if (roleFilter) {
-      clubs = clubs.filter(sc => sc.role === roleFilter);
+      query.role = roleFilter;
     }
+    
+    // Get memberships and populate club details
+    let memberships = await Membership.find(query)
+      .populate({
+        path: 'club',
+        select: 'name category logoUrl status',
+        match: { status: 'active' } // Only populate active clubs
+      })
+      .sort({ createdAt: -1 }); // Most recent first
+    
+    let clubs = memberships
+      .filter(m => m.club) // Filter out null clubs (inactive/deleted)
+      .map(m => ({
+        club: m.club,
+        role: m.role,
+        joinedAt: m.createdAt // Use createdAt as joinedAt
+      }));
     
     // ✅ If user is a coordinator, also include clubs they coordinate
     if (user.roles?.global === 'coordinator') {
@@ -92,8 +114,8 @@ class UserService {
       
       // Add coordinated clubs to the list
       coordinatedClubs.forEach(club => {
-        // Don't duplicate if already in scoped clubs
-        const exists = clubs.some(sc => sc.club?._id?.toString() === club._id.toString());
+        // Don't duplicate if already in memberships
+        const exists = clubs.some(c => c.club._id.toString() === club._id.toString());
         if (!exists) {
           clubs.push({
             club: club,
@@ -103,10 +125,7 @@ class UserService {
       });
     }
     
-    return clubs.map(sc => ({
-      club: sc.club,
-      role: sc.role  // member | core | vicePresident | secretary | treasurer | leadPR | leadTech | president
-    }));
+    return clubs;
   }
 
   // 4) Admin: list users with filters & pagination

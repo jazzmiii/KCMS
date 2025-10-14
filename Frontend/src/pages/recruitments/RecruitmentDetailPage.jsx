@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import Layout from '../../components/Layout';
 import recruitmentService from '../../services/recruitmentService';
+import userService from '../../services/userService';
 import '../../styles/Recruitments.css';
 
 const RecruitmentDetailPage = () => {
@@ -12,6 +13,7 @@ const RecruitmentDetailPage = () => {
   const [recruitment, setRecruitment] = useState(null);
   const [loading, setLoading] = useState(true);
   const [applying, setApplying] = useState(false);
+  const [myClubsCount, setMyClubsCount] = useState(0);
   const [applicationData, setApplicationData] = useState({
     whyJoin: '',
     skills: '',
@@ -21,6 +23,7 @@ const RecruitmentDetailPage = () => {
 
   useEffect(() => {
     fetchRecruitmentDetails();
+    fetchMyClubs();
   }, [id]);
 
   const fetchRecruitmentDetails = async () => {
@@ -31,6 +34,15 @@ const RecruitmentDetailPage = () => {
       console.error('Error fetching recruitment details:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchMyClubs = async () => {
+    try {
+      const response = await userService.getMyClubs();
+      setMyClubsCount(response.data?.clubs?.length || 0);
+    } catch (error) {
+      console.error('Error fetching clubs:', error);
     }
   };
 
@@ -161,6 +173,18 @@ const RecruitmentDetailPage = () => {
           {isOpen && !canManage && (
             <div className="application-form-section">
               <h2>Apply Now</h2>
+              
+              {/* 3-Club Limit Warning */}
+              {myClubsCount >= 3 && (
+                <div className="alert alert-warning" style={{ marginBottom: '20px', padding: '16px', backgroundColor: '#fef3c7', border: '1px solid: #f59e0b', borderRadius: '8px' }}>
+                  <h4 style={{ margin: '0 0 8px 0', color: '#92400e' }}>⚠️ Maximum Club Limit Reached</h4>
+                  <p style={{ margin: 0, color: '#78350f' }}>
+                    You are already a member of {myClubsCount} clubs. Students can join a maximum of 3 clubs. 
+                    You cannot apply to this recruitment unless you leave one of your current clubs.
+                  </p>
+                </div>
+              )}
+
               <form onSubmit={handleSubmit} className="application-form">
                 <div className="form-group">
                   <label htmlFor="whyJoin">Why do you want to join this club? *</label>
@@ -231,8 +255,13 @@ const RecruitmentDetailPage = () => {
                   >
                     Cancel
                   </button>
-                  <button type="submit" className="btn btn-primary" disabled={applying}>
-                    {applying ? 'Submitting...' : 'Submit Application'}
+                  <button 
+                    type="submit" 
+                    className="btn btn-primary" 
+                    disabled={applying || myClubsCount >= 3}
+                    title={myClubsCount >= 3 ? 'You have reached the maximum club limit (3 clubs)' : ''}
+                  >
+                    {applying ? 'Submitting...' : myClubsCount >= 3 ? 'Maximum Clubs Reached' : 'Submit Application'}
                   </button>
                 </div>
               </form>

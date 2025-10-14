@@ -50,12 +50,11 @@ router.get(
 );
 
 // Generate Club Activity Report (Coordinator or Admin - Section 8.2)
-router.post(
+router.get(
   '/clubs/:clubId/activity/:year',
   authenticate,
   requireCoordinatorOrAdmin(),
-  validate(v.clubId, 'params'),
-  validate(v.year, 'params'),
+  validate(v.clubIdAndYear, 'params'),
   ctrl.generateClubActivityReport
 );
 
