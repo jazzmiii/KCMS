@@ -28,15 +28,21 @@ const CoreDashboard = () => {
 
   const fetchDashboardData = async () => {
     try {
-      // Get clubs where user has management role (core member or higher)
+      // Get ALL clubs (backend will return approved memberships only)
+      const clubsRes = await userService.getMyClubs();
+      // Backend: successResponse(res, { clubs }) → { status, data: { clubs: [{ club, role }] } }
+      const allMemberships = clubsRes.data?.clubs || [];
+      
+      // Filter to only show clubs where user has management role
       const managementRoles = ['core', 'president', 'vicePresident', 'secretary', 'treasurer', 'leadPR', 'leadTech'];
-      const clubsRes = await userService.getMyClubs(managementRoles);
-      // Backend: successResponse(res, { clubs }) → { status, data: { clubs } }
-      const userClubs = clubsRes.data?.clubs || [];
+      const userClubs = allMemberships
+        .filter(m => managementRoles.includes(m.role))
+        .map(m => m.club);
+      
       const clubIds = userClubs.map(c => c._id);
 
       const [eventsRes, recruitmentsRes] = await Promise.all([
-        eventService.list({ limit: 100, status: 'published' }),
+        eventService.list({ limit: 100, status: 'published', upcoming: true }), // ✅ Only future events
         recruitmentService.list({ limit: 100 }),
       ]);
 

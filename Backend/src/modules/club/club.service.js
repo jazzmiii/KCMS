@@ -122,14 +122,14 @@ class ClubService {
   }
 
   // List active clubs (with Redis caching)
-  async listClubs({ category, search, coordinator, page = 1, limit = 20, _t }) {
-    const key = `${CLUB_LIST_CACHE}:${category||'all'}:${search||''}:${coordinator||''}:${page}:${limit}`;
+  async listClubs({ category, search, coordinator, status, page = 1, limit = 20, _t }) {
+    const key = `${CLUB_LIST_CACHE}:${category||'all'}:${search||''}:${coordinator||''}:${status||'active'}:${page}:${limit}`;
     
     // Skip cache if timestamp parameter is provided (cache busting)
     const cached = _t ? null : await redis.get(key);
     if (cached) return JSON.parse(cached);
 
-    const query = { status: 'active' };
+    const query = { status: status || 'active' }; // Support status filter (active/archived)
     if (category) query.category = category;
     if (search) query.name = new RegExp(search, 'i');
     if (coordinator) query.coordinator = coordinator; // Filter by assigned coordinator
@@ -183,14 +183,30 @@ class ClubService {
 
     // If user is a member, include full member list
     if (userContext) {
-      const isMember = await Membership.exists({
+      const membership = await Membership.findOne({
         club: clubId,
         user: userContext.id,
         status: 'approved'
       });
-      if (isMember) {
+      
+      if (membership) {
         data.members = await Membership.find({ club: clubId, status: 'approved' })
           .populate('user', 'profile.name rollNumber');
+        
+        // ✅ Add permission flags (BACKEND is SOURCE OF TRUTH)
+        data.userRole = membership.role; // User's role in this club
+        data.canEdit = membership.role === 'president'; // Only president can edit
+        data.canManage = ['president', 'core', 'vicePresident', 'secretary', 'treasurer', 'leadPR', 'leadTech'].includes(membership.role);
+      } else {
+        // User is not a member
+        data.canEdit = false;
+        data.canManage = false;
+      }
+      
+      // Admin override
+      if (userContext.roles?.global === 'admin') {
+        data.canEdit = true;
+        data.canManage = true;
       }
     }
 
@@ -271,13 +287,14 @@ class ClubService {
       } else {
         // President: Store protected under pendingSettings for approval
         club.pendingSettings = { ...club.pendingSettings, ...prot };
-        club.status = 'pending_approval';
+        // ✅ FIXED: Club status remains 'active', only pendingSettings waits for approval
+        // club.status = 'pending_approval'; // ❌ REMOVED - Don't change club status!
 
         // Notify coordinator for approval
         await notificationService.create({
           user: club.coordinator,
           type: 'approval_required',
-          payload: { clubId, pending: Object.keys(prot) },
+          payload: { clubId, clubName: club.name, pending: Object.keys(prot) },
           priority: 'HIGH'
         });
 
@@ -342,6 +359,50 @@ class ClubService {
     return club;
   }
 
+  /**
+   * Coordinator/Admin rejects pendingSettings.
+   */
+  async rejectSettings(clubId, userContext) {
+    const club = await Club.findById(clubId);
+    if (!club) throw Object.assign(new Error('Club not found'), { statusCode: 404 });
+    if (!club.pendingSettings) {
+      throw Object.assign(new Error('No pending changes'), { statusCode: 400 });
+    }
+
+    const rejectedChanges = { ...club.pendingSettings };
+    club.pendingSettings = undefined;
+    await club.save();
+
+    // Notify president
+    const presidentMembership = await Membership.findOne({ 
+      club: clubId, 
+      role: 'president', 
+      status: 'approved' 
+    });
+    
+    if (presidentMembership) {
+      await notificationService.create({
+        user: presidentMembership.user,
+        type: 'settings_rejected',
+        payload: { clubId, clubName: club.name, rejectedChanges },
+        priority: 'MEDIUM'
+      });
+    }
+
+    // Audit rejection
+    await auditService.log({
+      user: userContext.id,
+      action: 'CLUB_PROTECTED_UPDATE_REJECT',
+      target: `Club:${clubId}`,
+      oldValue: rejectedChanges,
+      ip: userContext.ip,
+      userAgent: userContext.userAgent
+    });
+
+    await this.flushCache();
+    return club;
+  }
+
   // DEPRECATED: Club approval no longer needed
   // Admin creates clubs directly as 'active' (no approval workflow)
   // Only settings changes require approval (see approveSettings above)
@@ -374,6 +435,40 @@ class ClubService {
       target: `Club:${clubId}`,
       oldValue: { status: prevStatus },
       newValue: { status: 'archived' },
+      ip: userContext.ip,
+      userAgent: userContext.userAgent
+    });
+
+    await this.flushCache();
+    return club;
+  }
+
+  // Restore archived club
+  async restoreClub(clubId, userContext) {
+    const club = await Club.findById(clubId);
+    if (!club) throw Object.assign(new Error('Club not found'), { statusCode: 404 });
+    if (club.status !== 'archived') {
+      throw Object.assign(new Error('Club is not archived'), { statusCode: 400 });
+    }
+    
+    const prevStatus = club.status;
+    club.status = 'active';
+    await club.save();
+
+    // Notify core team
+    await notificationService.create({
+      user: userContext.id,
+      type: 'system_maintenance',
+      payload: { clubId, message: 'Club has been restored' },
+      priority: 'HIGH'
+    });
+
+    await auditService.log({
+      user: userContext.id,
+      action: 'CLUB_RESTORE',
+      target: `Club:${clubId}`,
+      oldValue: { status: prevStatus },
+      newValue: { status: 'active' },
       ip: userContext.ip,
       userAgent: userContext.userAgent
     });

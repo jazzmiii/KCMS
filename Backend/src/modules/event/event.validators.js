@@ -22,17 +22,24 @@ module.exports = {
 
   list: Joi.object({
     club: objectId.optional(),
-    status: Joi.string().valid('draft','pending','published','ongoing','completed','cancelled').optional(),
+    status: Joi.string().valid('draft','pending_coordinator','pending_admin','published','ongoing','completed','archived').optional(),
     limit: Joi.number().min(1).max(100).optional(),
     page: Joi.number().min(1).optional(),
     startDate: Joi.date().optional(),
-    endDate: Joi.date().optional()
+    endDate: Joi.date().optional(),
+    upcoming: Joi.boolean().optional(), // Filter for future events only
+    past: Joi.boolean().optional() // Filter for past events only
   }),
 
   eventId: Joi.object({ id: objectId.required() }),
 
   changeStatus: Joi.object({
-    action: Joi.string().valid('submit','approve','publish','start','complete').required()
+    action: Joi.string().valid('submit','approve','reject','publish','start','complete').required(),
+    reason: Joi.string().min(10).max(500).when('action', {
+      is: 'reject',
+      then: Joi.required(),
+      otherwise: Joi.optional()
+    })
   }),
 
   rsvp: Joi.object({}),

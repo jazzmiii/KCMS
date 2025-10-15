@@ -48,6 +48,7 @@ import NotificationsPage from './pages/notifications/NotificationsPage';
 import MaintenanceModePage from './pages/admin/MaintenanceModePage';
 import SystemSettings from './pages/admin/SystemSettings';
 import AuditLogs from './pages/admin/AuditLogs';
+import ArchivedClubsPage from './pages/admin/ArchivedClubsPage';
 
 // Reports Pages
 import ReportsPage from './pages/reports/ReportsPage';
@@ -266,6 +267,14 @@ function App() {
             element={
               <ProtectedRoute requiredRole="admin">
                 <AuditLogs />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/archived-clubs"
+            element={
+              <ProtectedRoute requiredRole="admin">
+                <ArchivedClubsPage />
               </ProtectedRoute>
             }
           />

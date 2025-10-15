@@ -106,6 +106,22 @@
   color: var(--text-secondary);
 }
 
+.readonly-field {
+  padding: 0.75rem 1rem;
+  background-color: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  color: #374151;
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.loading-text {
+  color: #6b7280;
+  font-weight: normal;
+  font-style: italic;
+}
+
 .form-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));

@@ -24,6 +24,7 @@ module.exports = {
     category: Joi.string().valid('technical','cultural','sports','arts','social'),
     search: Joi.string().allow(''),
     coordinator: objectId.optional(),  // ✅ Allow filtering by coordinator
+    status: Joi.string().valid('active','archived','pending_approval').optional(), // ✅ Allow filtering by status
     _t: Joi.number().optional(),       // ✅ Allow cache-busting timestamp
     page: Joi.number().integer().min(1).default(1),
     limit: Joi.number().integer().min(1).max(100).default(20)

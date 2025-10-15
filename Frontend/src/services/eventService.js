@@ -22,9 +22,10 @@ const eventService = {
   },
 
   // Change Status
-  // action: 'submit' | 'approve' | 'publish' | 'start' | 'complete'
-  changeStatus: async (id, action) => {
-    const response = await api.patch(`/events/${id}/status`, { action });
+  // action: 'submit' | 'approve' | 'reject' | 'publish' | 'start' | 'complete'
+  // extraData: { reason } - required for 'reject' action
+  changeStatus: async (id, action, extraData = {}) => {
+    const response = await api.patch(`/events/${id}/status`, { action, ...extraData });
     return response.data;
   },
 

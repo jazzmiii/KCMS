@@ -1,11 +1,15 @@
 const router       = require('express').Router();
 const authenticate = require('../../middlewares/auth');
+const optionalAuth = require('../../middlewares/optionalAuth'); // ✅ Optional authentication
 const { 
   permit, 
   requireEither, 
-  requireAssignedCoordinatorOrClubRoleForEvent 
+  requireAssignedCoordinatorOrClubRoleForEvent,
+  CORE_AND_PRESIDENT,  // ✅ All core roles + president
+  PRESIDENT_ONLY       // ✅ President only
 } = require('../../middlewares/permission');
 const validate     = require('../../middlewares/validate');
+const parseFormData = require('../../middlewares/parseFormData');
 const multer       = require('multer');
 const upload       = multer({ dest: 'uploads/' });
 const v            = require('./event.validators');
@@ -15,19 +19,22 @@ const ctrl         = require('./event.controller');
 router.post(
   '/',
   authenticate,
-  requireEither(['admin'], ['core', 'president']), // Admin OR Club Core+
   upload.fields([
     { name: 'proposal', maxCount: 1 },
     { name: 'budgetBreakdown', maxCount: 1 },
     { name: 'venuePermission', maxCount: 1 }
   ]),
+  parseFormData,
+  requireEither(['admin'], CORE_AND_PRESIDENT, 'club'), // ✅ Core team + President
   validate(v.createEvent),
   ctrl.createEvent
 );
 
-// List Events (Public - Section 5.1)
+// List Events (Public but with optional authentication for permission filtering - Section 5.1)
+// ✅ Uses optionalAuth to extract user info if available, but doesn't require login
 router.get(
   '/',
+  optionalAuth,
   validate(v.list),
   ctrl.listEvents
 );
@@ -43,7 +50,7 @@ router.get(
 router.patch(
   '/:id/status',
   authenticate,
-  requireAssignedCoordinatorOrClubRoleForEvent(['core', 'vicePresident', 'secretary', 'treasurer', 'leadPR', 'leadTech', 'president']), // Admin OR Assigned Coordinator OR Club Core+
+  requireAssignedCoordinatorOrClubRoleForEvent(CORE_AND_PRESIDENT), // ✅ Admin OR Assigned Coordinator OR Core+President
   validate(v.eventId, 'params'),
   validate(v.changeStatus),
   ctrl.changeStatus
@@ -61,7 +68,7 @@ router.post(
 router.post(
   '/:id/attendance',
   authenticate,
-  requireEither(['admin', 'coordinator'], ['core', 'president']), // Admin/Coordinator OR Club Core+
+  requireEither(['admin', 'coordinator'], CORE_AND_PRESIDENT), // ✅ Admin/Coordinator OR Core+President
   validate(v.eventId, 'params'),
   validate(v.attendance),
   ctrl.markAttendance
@@ -71,7 +78,7 @@ router.post(
 router.post(
   '/:id/budget',
   authenticate,
-  requireEither(['admin'], ['core', 'president']), // Admin OR Club Core+
+  requireEither(['admin'], CORE_AND_PRESIDENT), // ✅ Admin OR Core+President
   validate(v.eventId, 'params'),
   validate(v.budgetRequest),
   ctrl.createBudget
@@ -81,7 +88,7 @@ router.post(
 router.get(
   '/:id/budget',
   authenticate,
-  requireEither(['admin'], ['core', 'president']), // Admin OR Club Core+
+  requireEither(['admin'], CORE_AND_PRESIDENT), // ✅ Admin OR Core+President
   validate(v.eventId, 'params'),
   ctrl.listBudgets
 );
@@ -90,7 +97,7 @@ router.get(
 router.post(
   '/:id/budget/settle',
   authenticate,
-  requireEither(['admin'], ['president']), // Admin OR Club President
+  requireEither(['admin'], PRESIDENT_ONLY), // ✅ Admin OR President ONLY
   validate(v.eventId, 'params'),
   validate(v.settleBudget),
   ctrl.settleBudget

@@ -19,11 +19,40 @@ const AdminDashboard = () => {
   });
   const [recentClubs, setRecentClubs] = useState([]);
   const [recentEvents, setRecentEvents] = useState([]);
+  const [pendingEvents, setPendingEvents] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchDashboardData();
   }, []);
+
+  const handleApproveEvent = async (eventId) => {
+    try {
+      await eventService.changeStatus(eventId, 'approve'); // ✅ Use 'approve' not 'approveAdmin'
+      alert('Event approved successfully!');
+      fetchDashboardData(); // Refresh dashboard
+    } catch (error) {
+      console.error('Failed to approve event:', error);
+      alert('Failed to approve event: ' + (error.response?.data?.message || error.message));
+    }
+  };
+
+  const handleRejectEvent = async (eventId) => {
+    const reason = prompt('Please provide a reason for rejection (minimum 10 characters):');
+    if (!reason || reason.length < 10) {
+      alert('Rejection reason must be at least 10 characters');
+      return;
+    }
+
+    try {
+      await eventService.changeStatus(eventId, 'reject', { reason });
+      alert('Event rejected successfully');
+      fetchDashboardData(); // Refresh dashboard
+    } catch (error) {
+      console.error('Failed to reject event:', error);
+      alert('Failed to reject event: ' + (error.response?.data?.message || error.message));
+    }
+  };
 
   const fetchDashboardData = async () => {
     try {
@@ -46,15 +75,18 @@ const AdminDashboard = () => {
       const activeClubsCount = allClubs.filter(c => c.status === 'active').length;
       const publishedEventsCount = allEvents.filter(e => e.status === 'published').length;
       
-      // Note: 'pending_approval' status removed from workplan - clubs created directly as 'active'
-      // Pending approvals now refer to settings changes (pendingSettings field)
-      const pendingSettingsCount = allClubs.filter(c => c.pendingSettings).length;
+      // ✅ Admin pending approvals = Events with status 'pending_admin'
+      // (Events with budget > 5000 or guest speakers require admin approval)
+      const pendingAdminEvents = allEvents.filter(e => e.status === 'pending_admin');
+      const pendingAdminApprovals = pendingAdminEvents.length;
+      
+      setPendingEvents(pendingAdminEvents);
 
       const calculatedStats = {
         totalClubs: allClubsRes.data?.total || allClubs.length,
         totalEvents: allEventsRes.data?.total || allEvents.length,
         totalUsers: usersRes.data?.total || 0,
-        pendingApprovals: pendingSettingsCount,
+        pendingApprovals: pendingAdminApprovals,
         activeClubs: activeClubsCount,
         publishedEvents: publishedEventsCount,
       };
@@ -149,8 +181,76 @@ const AdminDashboard = () => {
               <h3>Reports</h3>
               <p>Generate NAAC/NBA reports</p>
             </Link>
+            <Link to="/admin/archived-clubs" className="action-card action-warning">
+              <span className="action-icon">🗄️</span>
+              <h3>Archived Clubs</h3>
+              <p>View and restore archived clubs</p>
+            </Link>
           </div>
         </div>
+
+        {/* Pending Admin Approvals */}
+        {pendingEvents.length > 0 && (
+          <div className="dashboard-section">
+            <div className="section-header">
+              <h2>⏳ Pending Admin Approvals</h2>
+              <Link to="/events" className="view-all">View All →</Link>
+            </div>
+            <div className="table-container">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Event Name</th>
+                    <th>Club</th>
+                    <th>Date</th>
+                    <th>Budget</th>
+                    <th>Reason</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingEvents.map((event) => {
+                    const eventDate = new Date(event.dateTime || event.date);
+                    const isValidDate = !isNaN(eventDate.getTime());
+                    const reason = event.budget > 5000 
+                      ? `Budget: ₹${event.budget}` 
+                      : event.guestSpeakers?.length > 0 
+                        ? 'Guest Speakers' 
+                        : 'Requires Approval';
+                    return (
+                      <tr key={event._id}>
+                        <td>{event.title || event.name}</td>
+                        <td>{event.club?.name || 'N/A'}</td>
+                        <td>{isValidDate ? eventDate.toLocaleDateString() : 'Date TBA'}</td>
+                        <td>₹{event.budget || 0}</td>
+                        <td><span className="badge badge-warning">{reason}</span></td>
+                        <td>
+                          <div className="action-buttons">
+                            <Link to={`/events/${event._id}`} className="btn btn-sm btn-outline">
+                              View
+                            </Link>
+                            <button 
+                              onClick={() => handleApproveEvent(event._id)}
+                              className="btn btn-sm btn-success"
+                            >
+                              ✓ Approve
+                            </button>
+                            <button 
+                              onClick={() => handleRejectEvent(event._id)}
+                              className="btn btn-sm btn-danger"
+                            >
+                              ✗ Reject
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         {/* Recent Clubs */}
         <div className="dashboard-section">

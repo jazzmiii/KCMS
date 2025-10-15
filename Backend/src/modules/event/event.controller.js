@@ -23,7 +23,14 @@ exports.createEvent = async (req, res, next) => {
  */
 exports.listEvents = async (req, res, next) => {
   try {
-    const data = await svc.list(req.query);
+    // Pass user context for permission filtering
+    const userContext = req.user ? {
+      id: req.user.id,
+      roles: req.user.roles,
+      memberships: req.user.memberships || []
+    } : null;
+    
+    const data = await svc.list(req.query, userContext);
     successResponse(res, data);
   } catch (err) {
     next(err);
@@ -31,11 +38,11 @@ exports.listEvents = async (req, res, next) => {
 };
 
 /**
- * Get Event Details
+ * Get Event Details (includes canManage flag)
  */
 exports.getEvent = async (req, res, next) => {
   try {
-    const event = await svc.getById(req.params.id);
+    const event = await svc.getById(req.params.id, req.user); // ✅ Pass user context
     successResponse(res, { event });
   } catch (err) {
     next(err);

@@ -29,25 +29,8 @@ const UserSchema = new mongoose.Schema({
       type: String,
       enum: ['student', 'coordinator', 'admin'],
       default: 'student'
-    },
-    scoped: [
-      {
-        club: { type: mongoose.Types.ObjectId, ref: 'Club' },
-        role: {
-          type: String,
-          enum: [
-            'member',         // Regular member
-            'core',           // Generic core member
-            'vicePresident',  // Core: VP
-            'secretary',      // Core: Secretary
-            'treasurer',      // Core: Treasurer
-            'leadPR',         // Core: Lead PR
-            'leadTech',       // Core: Lead Tech
-            'president'       // President (highest)
-          ]
-        }
-      }
-    ]
+    }
+    // REMOVED scoped roles - Use Membership collection as SINGLE SOURCE OF TRUTH
   },
 
   profile: {

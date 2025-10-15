@@ -41,48 +41,133 @@ class EventService {
       userAgent: userContext.userAgent
     });
 
-    // Notify coordinator for approval
-    await notificationSvc.create({
-      user: evt.coordinator,
-      type: 'approval_required',
-      payload: { eventId: evt._id, title: evt.title },
-      priority: 'HIGH'
-    });
+    // ✅ Notification will be sent when event is SUBMITTED (changeStatus 'submit')
+    // Not when created (status is 'draft')
 
     return evt;
   }
 
   /**
    * List events with pagination and filters.
+   * ✅ Permission-based filtering:
+   * - draft/pending_coordinator/pending_admin: Only visible to creator, assigned coordinator, or admin
+   * - published/ongoing/completed: Visible to everyone
    */
-  async list({ club, status, page = 1, limit = 20 }) {
+  async list({ club, status, page = 1, limit = 20, upcoming, past }, userContext = null) {
     const query = {};
     if (club)   query.club   = club;
-    if (status) query.status = status;
+
+    // ✅ Permission-based status filtering
+    const restrictedStatuses = ['draft', 'pending_coordinator', 'pending_admin'];
+    const publicStatuses = ['published', 'ongoing', 'completed', 'archived'];
+    
+    if (status) {
+      if (restrictedStatuses.includes(status)) {
+        // Restricted statuses - only visible to authorized users
+        if (!userContext) {
+          // Not authenticated - can't see restricted events
+          query.status = { $in: [] }; // Return no results
+        } else {
+          const isAdmin = userContext.roles?.global === 'admin';
+          
+          if (isAdmin) {
+            // Admin can see all restricted events
+            query.status = status;
+          } else {
+            // For non-admins, filter by events from their clubs
+            const { Club } = require('../club/club.model');
+            const { Membership } = require('../club/membership.model');
+            
+            // Get clubs where user is coordinator or member
+            const [coordinatorClubs, memberClubs] = await Promise.all([
+              Club.find({ coordinator: userContext.id }).select('_id'),
+              Membership.find({ user: userContext.id, status: 'approved' }).select('club')
+            ]);
+            
+            const clubIds = [
+              ...coordinatorClubs.map(c => c._id),
+              ...memberClubs.map(m => m.club)
+            ];
+            
+            // Only show events from user's clubs with the requested status
+            query.status = status;
+            query.club = { $in: clubIds };
+          }
+        }
+      } else {
+        // Public statuses (published, ongoing, completed) - visible to all
+        query.status = status;
+      }
+    } else {
+      // ✅ No status specified - only show public events by default
+      query.status = { $in: publicStatuses };
+    }
+
+    // ✅ Filter by date for upcoming/past events
+    const now = new Date();
+    if (upcoming === 'true' || upcoming === true) {
+      query.dateTime = { $gte: now }; // Future events only
+    } else if (past === 'true' || past === true) {
+      query.dateTime = { $lt: now }; // Past events only
+    }
 
     const skip = (page - 1) * limit;
+    
+    // ✅ Smart sorting based on status/filter
+    let sortOrder = { dateTime: -1 }; // Default: newest first
+    if (status === 'published' || upcoming) {
+      sortOrder = { dateTime: 1 }; // Upcoming: soonest first
+    } else if (status === 'completed') {
+      sortOrder = { dateTime: -1 }; // Completed: most recent first
+    }
+
     const [total, events] = await Promise.all([
       Event.countDocuments(query),
       Event.find(query)
         .populate('club', 'name logo category') // Populate club details
         .skip(skip)
         .limit(limit)
-        .sort({ dateTime: -1 })
+        .sort(sortOrder)
     ]);
     return { total, page, limit, events };
   }
 
   /**
-   * Get event details.
+   * Get event details with permission flags.
    */
-  async getById(id) {
+  async getById(id, userContext) {
     const evt = await Event.findById(id).populate('club', 'name logo category coordinator');
     if (!evt) {
       const err = new Error('Event not found');
       err.statusCode = 404;
       throw err;
     }
-    return evt;
+    
+    const data = evt.toObject();
+    
+    // ✅ Add canManage flag (BACKEND is SOURCE OF TRUTH)
+    if (userContext && userContext.id) {
+      const isAdmin = userContext.roles?.global === 'admin';
+      const isCoordinator = userContext.roles?.global === 'coordinator' && 
+                           evt.club?.coordinator?.toString() === userContext.id.toString();
+      
+      // Check club membership
+      const { Membership } = require('../club/membership.model');
+      const membership = await Membership.findOne({
+        user: userContext.id,
+        club: evt.club._id,
+        status: 'approved'
+      });
+      
+      const coreRoles = ['president', 'core', 'vicePresident', 'secretary', 'treasurer', 'leadPR', 'leadTech'];
+      const hasClubRole = membership && coreRoles.includes(membership.role);
+      
+      data.canManage = isAdmin || isCoordinator || hasClubRole;
+    } else {
+      data.canManage = false;
+    }
+    
+    return data;
   }
 
   /**
@@ -156,13 +241,13 @@ class EventService {
         ));
       }
 
-    } else if (action === 'approveAdmin' && prevStatus === 'pending_admin') {
-      // Admin approval for high-budget or special events
+    } else if (action === 'approve' && prevStatus === 'pending_admin') {
+      // ✅ Admin approval for high-budget or special events
       evt.status = 'approved';
       evt.status = 'published';
 
       // Notify all members
-      const members = await Membership.find({ club: evt.club, status: 'approved' })
+      const members = await Membership.find({ club: evt.club._id, status: 'approved' })
         .distinct('user');
       await Promise.all(members.map(u =>
         notificationSvc.create({
@@ -199,6 +284,40 @@ class EventService {
       evt.status = 'completed';
       // Set report due date to 7 days from completion
       evt.reportDueDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    } else if (action === 'reject') {
+      // ✅ Reject event (Coordinator or Admin can reject)
+      // Can reject from pending_coordinator or pending_admin status
+      if (!['pending_coordinator', 'pending_admin'].includes(prevStatus)) {
+        const err = new Error('Can only reject events pending approval');
+        err.statusCode = 400;
+        throw err;
+      }
+      
+      evt.status = 'draft'; // Send back to draft
+      evt.rejectionReason = statusData.reason;
+      evt.rejectedBy = userContext.id;
+      evt.rejectedAt = new Date();
+      
+      // Notify club president about rejection
+      const president = await Membership.findOne({
+        club: evt.club._id,
+        role: 'president',
+        status: 'approved'
+      });
+      
+      if (president) {
+        await notificationSvc.create({
+          user: president.user,
+          type: 'event_rejected',
+          payload: { 
+            eventId: id, 
+            title: evt.title,
+            reason: statusData.reason
+          },
+          priority: 'HIGH'
+        });
+      }
 
     } else {
       const err = new Error('Invalid action/state');

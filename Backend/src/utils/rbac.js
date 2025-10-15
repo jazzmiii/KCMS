@@ -10,21 +10,7 @@ function hasGlobalRole(user, allowed = []) {
 }
 
 /**
- * Check if user has one of the given scoped roles in a specific club
- * @param {Object} user.roles.scoped - array [{ club, role }]
- * @param {string} clubId
- * @param {string[]} allowed
- */
-function hasScopedRole(user, clubId, allowed = []) {
-  if (!Array.isArray(user.roles.scoped)) return false;
-  return user.roles.scoped.some(
-    (entry) => entry.club.toString() === clubId && allowed.includes(entry.role)
-  );
-}
-
-/**
  * Check if user has club role via Membership collection (SINGLE SOURCE OF TRUTH)
- * This is the CORRECT way since User.roles.scoped is not always synced
  * @param {string} userId - User ID
  * @param {string} clubId - Club ID
  * @param {string[]} allowed - Array of allowed roles
@@ -54,4 +40,4 @@ async function hasClubMembership(userId, clubId, allowed = []) {
   }
 }
 
-module.exports = { hasGlobalRole, hasScopedRole, hasClubMembership };
+module.exports = { hasGlobalRole, hasClubMembership };

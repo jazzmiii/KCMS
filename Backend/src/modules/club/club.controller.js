@@ -56,7 +56,18 @@ exports.approveSettings = async (req, res, next) => {
       req.params.clubId,
       { id: req.user.id, ip: req.ip, userAgent: req.headers['user-agent'] }
     );
-    successResponse(res, { club }, 'Protected settings approved');
+    successResponse(res, { club }, 'Settings approved');
+  } catch (err) { next(err); }
+};
+
+// Reject protected settings
+exports.rejectSettings = async (req, res, next) => {
+  try {
+    const club = await clubService.rejectSettings(
+      req.params.clubId,
+      { id: req.user.id, ip: req.ip, userAgent: req.headers['user-agent'] }
+    );
+    successResponse(res, { club }, 'Settings rejected');
   } catch (err) { next(err); }
 };
 
@@ -82,6 +93,19 @@ exports.archiveClub = async (req, res, next) => {
       { id: req.user.id, ip: req.ip, userAgent: req.headers['user-agent'] }
     );
     successResponse(res, { club }, 'Club archived');
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Restore Archived Club
+exports.restoreClub = async (req, res, next) => {
+  try {
+    const club = await clubService.restoreClub(
+      req.params.clubId,
+      { id: req.user.id, ip: req.ip, userAgent: req.headers['user-agent'] }
+    );
+    successResponse(res, { club }, 'Club restored successfully');
   } catch (err) {
     next(err);
   }

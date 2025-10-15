@@ -3,6 +3,7 @@ import { useNavigate, useParams, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import Layout from '../../components/Layout';
 import clubService from '../../services/clubService';
+import userService from '../../services/userService';
 import '../../styles/Forms.css';
 
 const EditClubPage = () => {
@@ -16,6 +17,7 @@ const EditClubPage = () => {
     description: '',
     vision: '',
     mission: '',
+    coordinator: '', // Admin-only field
     socialLinks: {
       website: '',
       instagram: '',
@@ -29,11 +31,19 @@ const EditClubPage = () => {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [bannerFile, setBannerFile] = useState(null);
+  const [bannerPreview, setBannerPreview] = useState(null);
+  const [uploadingBanner, setUploadingBanner] = useState(false);
+  const [coordinators, setCoordinators] = useState([]);
+  const [loadingCoordinators, setLoadingCoordinators] = useState(false);
 
   const categories = ['technical', 'cultural', 'sports', 'arts', 'social'];
 
   useEffect(() => {
     fetchClubData();
+    if (user?.roles?.global === 'admin') {
+      fetchCoordinators();
+    }
   }, [clubId]);
 
   const fetchClubData = async () => {
@@ -49,6 +59,7 @@ const EditClubPage = () => {
         description: clubData.description || '',
         vision: clubData.vision || '',
         mission: clubData.mission || '',
+        coordinator: clubData.coordinator?._id || clubData.coordinator || '',
         socialLinks: {
           website: clubData.socialLinks?.website || '',
           instagram: clubData.socialLinks?.instagram || '',
@@ -61,6 +72,18 @@ const EditClubPage = () => {
       setError('Failed to load club data');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchCoordinators = async () => {
+    setLoadingCoordinators(true);
+    try {
+      const response = await userService.listUsers({ role: 'coordinator', limit: 100 });
+      setCoordinators(response.data?.users || []);
+    } catch (err) {
+      console.error('Error fetching coordinators:', err);
+    } finally {
+      setLoadingCoordinators(false);
     }
   };
 
@@ -88,6 +111,45 @@ const EditClubPage = () => {
     setSuccess('');
   };
 
+  const handleBannerChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        setError('Banner file size must be less than 5MB');
+        return;
+      }
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+        setError('Banner must be a JPEG, PNG, or WebP image');
+        return;
+      }
+      setBannerFile(file);
+      setBannerPreview(URL.createObjectURL(file));
+      setError('');
+    }
+  };
+
+  const handleBannerUpload = async () => {
+    if (!bannerFile) return;
+    
+    setUploadingBanner(true);
+    setError('');
+    setSuccess('');
+    
+    try {
+      await clubService.uploadBanner(clubId, bannerFile);
+      setSuccess('✅ Banner uploaded successfully!');
+      setBannerFile(null);
+      setBannerPreview(null);
+      // Refresh club data to show new banner
+      await fetchClubData();
+    } catch (err) {
+      console.error('Banner upload error:', err);
+      setError(err.response?.data?.message || '❌ Failed to upload banner');
+    } finally {
+      setUploadingBanner(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
@@ -97,16 +159,18 @@ const EditClubPage = () => {
     try {
       await clubService.updateSettings(clubId, formData);
       
-      // Check if protected fields were changed
+      // ✅ Protected fields (President changes require coordinator approval):
+      // - name, category, logoUrl (banner is uploaded separately)
+      // Note: Coordinator can ONLY be changed by admin (no approval needed)
       const protectedFields = ['name', 'category'];
       const hasProtectedChanges = protectedFields.some(
         field => formData[field] !== club[field]
       );
 
       if (hasProtectedChanges) {
-        setSuccess('Changes submitted for coordinator approval');
+        setSuccess('⏳ Changes submitted for coordinator approval');
       } else {
-        setSuccess('Club updated successfully!');
+        setSuccess('✅ Club updated successfully!');
       }
       
       // Redirect after 2 seconds
@@ -121,12 +185,8 @@ const EditClubPage = () => {
     }
   };
 
-  // Check permissions
-  const canEdit = user?.roles?.global === 'admin' || 
-                  club?.members?.some(m => 
-                    m.user === user?.id && 
-                    m.role === 'president'
-                  );
+  // ✅ Use backend-provided permission flag (SINGLE SOURCE OF TRUTH)
+  const canEdit = club?.canEdit || false;
 
   if (loading) {
     return (
@@ -176,11 +236,58 @@ const EditClubPage = () => {
 
           {/* Info Alert */}
           <div className="alert alert-info">
-            <strong>Note:</strong> Changes to club name and category require coordinator approval.
+            <strong>Note for Presidents:</strong> Changes to club name, category, and logo/banner require coordinator approval.
             Other changes will be applied immediately.
+            {user?.roles?.global === 'admin' && (
+              <>
+                <br />
+                <strong>Admin Note:</strong> You can change the coordinator assignment. This does not require approval.
+              </>
+            )}
           </div>
 
           <form onSubmit={handleSubmit} className="form">
+            {/* Banner Upload Section */}
+            <h3>🇫 Banner Image</h3>
+            <div className="form-group">
+              <label>
+                Upload Club Banner
+                {user?.roles?.global !== 'admin' && (
+                  <span className="label-badge">Requires Approval</span>
+                )}
+              </label>
+              {club?.bannerUrl && !bannerPreview && (
+                <div className="current-banner">
+                  <p><strong>Current Banner:</strong></p>
+                  <img src={club.bannerUrl} alt="Current banner" style={{ maxWidth: '100%', height: 'auto', marginBottom: '1rem' }} />
+                </div>
+              )}
+              {bannerPreview && (
+                <div className="banner-preview">
+                  <p><strong>New Banner Preview:</strong></p>
+                  <img src={bannerPreview} alt="Banner preview" style={{ maxWidth: '100%', height: 'auto', marginBottom: '1rem' }} />
+                </div>
+              )}
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={handleBannerChange}
+                className="file-input"
+              />
+              <small>Max size: 5MB. Formats: JPEG, PNG, WebP</small>
+              {bannerFile && (
+                <button
+                  type="button"
+                  onClick={handleBannerUpload}
+                  className="btn btn-success"
+                  disabled={uploadingBanner}
+                  style={{ marginTop: '1rem' }}
+                >
+                  {uploadingBanner ? 'Uploading...' : '⬆️ Upload Banner'}
+                </button>
+              )}
+            </div>
+
             {/* Basic Information */}
             <h3>Basic Information</h3>
             
@@ -222,6 +329,34 @@ const EditClubPage = () => {
                 ))}
               </select>
             </div>
+
+            {/* Coordinator Field - Admin Only */}
+            {user?.roles?.global === 'admin' && (
+              <div className="form-group">
+                <label htmlFor="coordinator">
+                  Faculty Coordinator * 
+                  <span className="label-badge" style={{ background: '#10b981' }}>Admin Only</span>
+                </label>
+                <select
+                  id="coordinator"
+                  name="coordinator"
+                  value={formData.coordinator}
+                  onChange={handleChange}
+                  required
+                  disabled={loadingCoordinators}
+                >
+                  <option value="">
+                    {loadingCoordinators ? 'Loading coordinators...' : '-- Select Faculty Coordinator --'}
+                  </option>
+                  {coordinators.map((coord) => (
+                    <option key={coord._id} value={coord._id}>
+                      {coord.profile?.name || 'No Name'} ({coord.email})
+                    </option>
+                  ))}
+                </select>
+                <small>Only admins can change the coordinator assignment. Current: {club?.coordinator?.profile?.name || club?.coordinator?.email || 'Not set'}</small>
+              </div>
+            )}
 
             <div className="form-group">
               <label htmlFor="description">Description *</label>

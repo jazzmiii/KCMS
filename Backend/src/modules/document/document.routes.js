@@ -1,6 +1,11 @@
 const router       = require('express').Router({ mergeParams: true });
 const authenticate = require('../../middlewares/auth');
-const { permit, requireEither } = require('../../middlewares/permission');
+const { 
+  permit, 
+  requireEither,
+  CORE_AND_PRESIDENT,  // ✅ All core roles + president
+  PRESIDENT_ONLY       // ✅ President only
+} = require('../../middlewares/permission');
 const validate     = require('../../middlewares/validate');
 const { validateUpload } = require('../../middlewares/fileValidator');
 const multer       = require('multer');
@@ -12,7 +17,7 @@ const ctrl         = require('./document.controller');
 router.post(
   '/upload',
   authenticate,
-  requireEither(['admin'], ['core', 'president']), // Admin OR Club Core+
+  requireEither(['admin'], CORE_AND_PRESIDENT), // ✅ Admin OR Core+President
   validate(v.clubIdParam, 'params'),
   upload.array('files', 10),
   validateUpload('image'), // Validate file type, size, and security
@@ -43,7 +48,7 @@ router.get(
 router.delete(
   '/:docId',
   authenticate,
-  requireEither(['admin'], ['president']), // Admin OR Club President
+  requireEither(['admin'], PRESIDENT_ONLY), // ✅ Admin OR President ONLY
   validate(v.docIdParam, 'params'),
   ctrl.delete
 );
@@ -52,7 +57,7 @@ router.delete(
 router.post(
   '/albums',
   authenticate,
-  requireEither(['admin'], ['core', 'president']), // Admin OR Club Core+
+  requireEither(['admin'], CORE_AND_PRESIDENT), // ✅ Admin OR Core+President
   validate(v.createAlbumSchema),
   ctrl.createAlbum
 );
@@ -69,7 +74,7 @@ router.get(
 router.post(
   '/bulk-upload',
   authenticate,
-  requireEither(['admin'], ['core', 'president']), // Admin OR Club Core+
+  requireEither(['admin'], CORE_AND_PRESIDENT), // ✅ Admin OR Core+President
   upload.array('files', 10),
   validateUpload('image'), // Validate file type, size, and security
   ctrl.bulkUpload
@@ -79,7 +84,7 @@ router.post(
 router.patch(
   '/:docId/tag',
   authenticate,
-  requireEither(['admin'], ['core', 'president']), // Admin OR Club Core+
+  requireEither(['admin'], CORE_AND_PRESIDENT), // ✅ Admin OR Core+President
   validate(v.docIdParam, 'params'),
   validate(v.tagMembersSchema),
   ctrl.tagMembers

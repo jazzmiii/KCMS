@@ -168,6 +168,21 @@ const ClubDashboard = () => {
     setShowEditRoleModal(true);
   };
 
+  const handleArchiveClub = async () => {
+    if (!window.confirm('⚠️ Are you sure you want to archive this club? This action cannot be undone.')) {
+      return;
+    }
+    
+    try {
+      await clubService.archiveClub(clubId);
+      alert('✅ Club archived successfully');
+      navigate('/clubs');
+    } catch (error) {
+      console.error('Error archiving club:', error);
+      alert(error.response?.data?.message || '❌ Failed to archive club');
+    }
+  };
+
   if (loading) {
     return (
       <Layout>
@@ -237,6 +252,16 @@ const ClubDashboard = () => {
             <Link to={`/clubs/${clubId}`} className="btn btn-outline">
               👁️ View Public Page
             </Link>
+            {/* ✅ Archive button - Only for Admin or President */}
+            {(user?.roles?.global === 'admin' || userRole === 'president') && (
+              <button 
+                onClick={handleArchiveClub} 
+                className="btn btn-danger"
+                style={{ marginLeft: '0.5rem' }}
+              >
+                🗑️ Archive Club
+              </button>
+            )}
           </div>
         </div>
 
@@ -428,12 +453,10 @@ const ClubDashboard = () => {
                         </div>
                       </div>
                       <div className="event-actions">
-                        <Link to={`/events/${event._id}`} className="btn btn-outline btn-sm">
-                          View Details
+                        <Link to={`/events/${event._id}`} className="btn btn-primary btn-sm">
+                          View & Manage
                         </Link>
-                        <Link to={`/events/${event._id}/edit`} className="btn btn-primary btn-sm">
-                          Edit
-                        </Link>
+                        {/* Note: Events cannot be edited once created. Use status transitions in detail page. */}
                       </div>
                     </div>
                   ))}
@@ -521,17 +544,41 @@ const ClubDashboard = () => {
                   members.map((member) => member && member._id ? (
                     <div key={member._id} className="member-card">
                       <div className="member-avatar">
-                        {member.user?.profile?.name?.charAt(0) || member.user?.email?.charAt(0) || 'U'}
+                        {member.user?.profile?.profilePhoto ? (
+                          <img 
+                            src={member.user.profile.profilePhoto} 
+                            alt={member.user?.profile?.name || 'User'} 
+                            className="member-avatar-img"
+                          />
+                        ) : (
+                          <span className="member-avatar-placeholder">
+                            {member.user?.profile?.name?.charAt(0) || member.user?.email?.charAt(0) || 'U'}
+                          </span>
+                        )}
                       </div>
                       <div className="member-info">
                         <h4>{member.user?.profile?.name || member.user?.email || 'Unknown'}</h4>
                         <p className="member-email">{member.user?.email || ''}</p>
-                        <span className={`badge badge-${member.role === 'president' ? 'primary' : 'secondary'}`}>
-                          {member.role || 'member'}
-                        </span>
-                        <span className={`badge badge-${member.status === 'approved' ? 'success' : 'warning'}`}>
-                          {member.status || 'pending'}
-                        </span>
+                        {/* ✅ Added department and batch info */}
+                        {(member.user?.profile?.department || member.user?.profile?.batch) && (
+                          <p className="member-details">
+                            {member.user?.profile?.department && <span>{member.user.profile.department}</span>}
+                            {member.user?.profile?.department && member.user?.profile?.batch && <span> • </span>}
+                            {member.user?.profile?.batch && <span>{member.user.profile.batch}</span>}
+                          </p>
+                        )}
+                        <div className="member-badges">
+                          <span className={`badge badge-${
+                            member.role === 'president' ? 'primary' : 
+                            member.role === 'core' || ['vicePresident', 'secretary', 'treasurer', 'leadPR', 'leadTech'].includes(member.role) ? 'info' : 
+                            'secondary'
+                          }`}>
+                            {member.role || 'member'}
+                          </span>
+                          <span className={`badge badge-${member.status === 'approved' ? 'success' : 'warning'}`}>
+                            {member.status || 'pending'}
+                          </span>
+                        </div>
                       </div>
                       {canManage && (
                         <div className="member-actions">

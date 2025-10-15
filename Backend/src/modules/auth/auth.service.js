@@ -119,7 +119,27 @@ exports.completeProfile = async (userId, profileData, userContext) => {
     userId,
     { profile: profileData, status: 'profile_complete' },
     { new: true }
-  );
+  ).lean();
+
+  // Fetch user's club memberships from Membership collection (SINGLE SOURCE OF TRUTH)
+  const { Membership } = require('../club/membership.model');
+  const memberships = await Membership.find({
+    user: user._id,
+    status: 'approved'
+  }).populate('club', 'name').lean();
+
+  // Transform memberships to match old roles.scoped format for frontend compatibility
+  const scopedRoles = memberships.map(m => ({
+    club: m.club._id,
+    role: m.role,
+    clubName: m.club.name
+  }));
+
+  // Attach scoped roles to user object (populated from Membership)
+  user.roles = {
+    ...user.roles,
+    scoped: scopedRoles
+  };
 
   // issue access token
   const accessToken = jwtUtil.sign(

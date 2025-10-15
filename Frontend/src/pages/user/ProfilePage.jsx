@@ -304,7 +304,7 @@ const ProfilePage = () => {
               <div className="club-roles-list">
                 {profile.roles.scoped.map((scopedRole, index) => (
                   <div key={index} className="club-role-item">
-                    <span className="club-name">{scopedRole.club?.name || 'Unknown Club'}</span>
+                    <span className="club-name">{scopedRole.clubName || 'Unknown Club'}</span>
                     <div className="role-badges">
                       <span className="badge badge-info">{scopedRole.role}</span>
                     </div>

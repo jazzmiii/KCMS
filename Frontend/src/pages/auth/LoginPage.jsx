@@ -36,9 +36,9 @@ const LoginPage = () => {
         navigate('/admin/dashboard');
       } else if (user.roles?.global === 'coordinator') {
         navigate('/coordinator/dashboard');
-      } else if (user.roles?.scoped?.some(cr => cr.role === 'core' || cr.role === 'president')) {
-        navigate('/core/dashboard');
       } else {
+        // ✅ All students (including core/president) go to StudentDashboard
+        // They can access club-specific dashboards from "My Clubs" section
         navigate('/dashboard');
       }
     } catch (err) {

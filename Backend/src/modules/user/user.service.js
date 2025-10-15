@@ -9,8 +9,29 @@ const notificationService= require('../notification/notification.service');
 class UserService {
   // 1) Self: get current profile
   async getMe(userId) {
-    const user = await User.findById(userId).select('-passwordHash');
+    const user = await User.findById(userId).select('-passwordHash').lean();
     if (!user) throw Object.assign(new Error('User not found'), { statusCode: 404 });
+    
+    // Fetch user's club memberships from Membership collection (SINGLE SOURCE OF TRUTH)
+    const { Membership } = require('../club/membership.model');
+    const memberships = await Membership.find({
+      user: userId,
+      status: 'approved'
+    }).populate('club', 'name').lean();
+
+    // Transform memberships to match old roles.scoped format for frontend compatibility
+    const scopedRoles = memberships.map(m => ({
+      club: m.club._id,
+      role: m.role,
+      clubName: m.club.name
+    }));
+
+    // Attach scoped roles to user object (populated from Membership)
+    user.roles = {
+      ...user.roles,
+      scoped: scopedRoles
+    };
+    
     return user;
   }
 
@@ -23,7 +44,27 @@ class UserService {
       userId,
       { profile: data },
       { new: true, select: '-passwordHash' }
-    );
+    ).lean();
+
+    // ✅ Fetch user's club memberships from Membership collection (SINGLE SOURCE OF TRUTH)
+    const { Membership } = require('../club/membership.model');
+    const memberships = await Membership.find({
+      user: userId,
+      status: 'approved'
+    }).populate('club', 'name').lean();
+
+    // Transform memberships to match old roles.scoped format for frontend compatibility
+    const scopedRoles = memberships.map(m => ({
+      club: m.club._id,
+      role: m.role,
+      clubName: m.club.name
+    }));
+
+    // Attach scoped roles to user object (populated from Membership)
+    user.roles = {
+      ...user.roles,
+      scoped: scopedRoles
+    };
 
     await auditService.log({
       user: userId,

@@ -29,7 +29,9 @@ const RecruitmentDetailPage = () => {
   const fetchRecruitmentDetails = async () => {
     try {
       const response = await recruitmentService.getById(id);
-      setRecruitment(response.data.recruitment);
+      // ✅ FIX: Axios returns full response object
+      // Structure: response.data = { status, data: { recruitment } }
+      setRecruitment(response.data?.data?.recruitment || response.data?.recruitment);
     } catch (error) {
       console.error('Error fetching recruitment details:', error);
     } finally {
@@ -103,10 +105,9 @@ const RecruitmentDetailPage = () => {
   }
 
   const isOpen = recruitment.status === 'open' || recruitment.status === 'closing_soon';
-  const canManage = user?.roles?.scoped?.some(cr => 
-    cr.club?.toString() === recruitment.clubId?._id?.toString() && 
-    (cr.role === 'president' || cr.role === 'core')
-  );
+  
+  // ✅ Use backend-provided permission flag (SINGLE SOURCE OF TRUTH)
+  const canManage = recruitment?.canManage || false;
 
   return (
     <Layout>

@@ -1,16 +1,20 @@
 //src/modules/recruitment/recruitment.routes.js
 const router       = require('express').Router();
 const authenticate = require('../../middlewares/auth');
-const { requireEither } = require('../../middlewares/permission');
+const { 
+  requireEither,
+  CORE_AND_PRESIDENT,  // ✅ All core roles + president
+  PRESIDENT_ONLY       // ✅ President only
+} = require('../../middlewares/permission');
 const validate     = require('../../middlewares/validate');
 const v            = require('./recruitment.validators');
 const ctrl         = require('./recruitment.controller');
 
-// Create Recruitment (President can create recruitment - Section 4.1)
+// Create Recruitment (Core+ can create recruitment - Section 4.1)
 router.post(
   '/',
   authenticate,
-  requireEither(['admin'], ['president']), // Admin OR Club President
+  requireEither(['admin'], CORE_AND_PRESIDENT), // ✅ Admin OR Core+President (Create recruitment)
   validate(v.createSchema),
   ctrl.create
 );
@@ -19,7 +23,7 @@ router.post(
 router.patch(
   '/:id',
   authenticate,
-  requireEither(['admin'], ['core', 'president']), // Admin OR Club Core+
+  requireEither(['admin'], CORE_AND_PRESIDENT), // ✅ Admin OR Core+President
   validate(v.recruitmentId, 'params'),
   validate(v.updateSchema),
   ctrl.update
@@ -29,7 +33,7 @@ router.patch(
 router.post(
   '/:id/status',
   authenticate,
-  requireEither(['admin'], ['core', 'president']), // Admin OR Club Core+
+  requireEither(['admin'], CORE_AND_PRESIDENT), // ✅ Admin OR Core+President
   validate(v.recruitmentId, 'params'),
   validate(v.lifecycleSchema),
   ctrl.changeStatus
@@ -62,7 +66,7 @@ router.post(
 router.get(
   '/:id/applications',
   authenticate,
-  requireEither(['admin'], ['core', 'president']), // Admin OR Club Core+
+  requireEither(['admin'], CORE_AND_PRESIDENT), // ✅ Admin OR Core+President
   validate(v.recruitmentId, 'params'),
   validate(v.listSchema, 'query'),
   ctrl.listApplications
@@ -72,7 +76,7 @@ router.get(
 router.patch(
   '/:id/applications/:appId',
   authenticate,
-  requireEither(['admin'], ['core', 'president']), // Admin OR Club Core+
+  requireEither(['admin'], CORE_AND_PRESIDENT), // ✅ Admin OR Core+President
   validate(v.recruitmentIdAndAppId, 'params'),
   validate(v.reviewSchema),
   ctrl.review
@@ -82,7 +86,7 @@ router.patch(
 router.patch(
   '/:id/applications',
   authenticate,
-  requireEither(['admin'], ['core', 'president']), // Admin OR Club Core+
+  requireEither(['admin'], CORE_AND_PRESIDENT), // ✅ Admin OR Core+President
   validate(v.recruitmentId, 'params'),
   validate(v.bulkReviewSchema),
   ctrl.bulkReview

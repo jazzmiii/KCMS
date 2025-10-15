@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import Layout from '../../components/Layout';
 import clubService from '../../services/clubService';
@@ -8,10 +8,13 @@ import '../../styles/Forms.css';
 
 const CreateEventPage = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const clubIdFromUrl = searchParams.get('clubId'); // ✅ Read clubId from URL
   const { user } = useAuth();
   const [myClubs, setMyClubs] = useState([]);
+  const [clubsLoading, setClubsLoading] = useState(true); // ✅ Track loading state
   const [formData, setFormData] = useState({
-    clubId: '',
+    clubId: clubIdFromUrl || '', // ✅ Pre-fill with URL clubId if available
     name: '',
     description: '',
     objectives: '',
@@ -39,16 +42,33 @@ const CreateEventPage = () => {
 
   const fetchMyClubs = async () => {
     try {
+      setClubsLoading(true);
       const response = await clubService.listClubs();
-      const managedClubs = response.data?.data?.clubs?.filter(club => 
-        user?.roles?.scoped?.some(cr => 
-          cr.club?.toString() === club._id?.toString() && 
-          (cr.role === 'president' || cr.role === 'core')
-        )
-      ) || [];
-      setMyClubs(managedClubs);
+      // ✅ FIX: Backend returns { status, data: { clubs } }, service returns response.data
+      // So we access: response.data?.clubs (NOT response.data?.data?.clubs)
+      const allClubs = response.data?.clubs || [];
+      
+      // ✅ Admins and Coordinators can see ALL clubs
+      if (user?.roles?.global === 'admin' || user?.roles?.global === 'coordinator') {
+        setMyClubs(allClubs);
+      } else {
+        // ✅ Students see only clubs where they have president/core/member role
+        const managedClubs = allClubs.filter(club => 
+          user?.roles?.scoped?.some(cr => 
+            cr.club?.toString() === club._id?.toString() && 
+            // ✅ Allow president, core members, AND regular members to create events
+            (cr.role === 'president' || cr.role === 'core' || cr.role === 'member' || 
+             cr.role === 'vicePresident' || cr.role === 'secretary' || cr.role === 'treasurer' ||
+             cr.role === 'leadPR' || cr.role === 'leadTech')
+          )
+        );
+        setMyClubs(managedClubs);
+      }
     } catch (error) {
       console.error('Error fetching clubs:', error);
+      setError('Failed to load clubs. Please refresh the page.');
+    } finally {
+      setClubsLoading(false);
     }
   };
 
@@ -70,6 +90,19 @@ const CreateEventPage = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // ✅ Validate clubId before submitting
+    if (!formData.clubId) {
+      setError('Please select a club before creating an event.');
+      return;
+    }
+    
+    // ✅ If coming from URL, verify user has permission for this club
+    if (clubIdFromUrl && !myClubs.find(c => c._id === clubIdFromUrl)) {
+      setError('You do not have permission to create events for this club.');
+      return;
+    }
+    
     setLoading(true);
     setError('');
 
@@ -78,11 +111,12 @@ const CreateEventPage = () => {
       
       // Combine date and time
       const dateTime = new Date(`${formData.date}T${formData.time}`);
-      formDataToSend.append('clubId', formData.clubId);
-      formDataToSend.append('name', formData.name);
+      // ✅ FIX: Use correct backend field names
+      formDataToSend.append('club', formData.clubId);        // Backend expects 'club' not 'clubId'
+      formDataToSend.append('title', formData.name);         // Backend expects 'title' not 'name'
       formDataToSend.append('description', formData.description);
       formDataToSend.append('objectives', formData.objectives);
-      formDataToSend.append('date', dateTime.toISOString());
+      formDataToSend.append('dateTime', dateTime.toISOString()); // Backend expects 'dateTime' not 'date'
       formDataToSend.append('duration', formData.duration);
       formDataToSend.append('venue', formData.venue);
       formDataToSend.append('capacity', formData.capacity);
@@ -122,23 +156,56 @@ const CreateEventPage = () => {
           {error && <div className="alert alert-error">{error}</div>}
 
           <form onSubmit={handleSubmit} className="form">
-            <div className="form-group">
-              <label htmlFor="clubId">Select Club *</label>
-              <select
-                id="clubId"
-                name="clubId"
-                value={formData.clubId}
-                onChange={handleChange}
-                required
-              >
-                <option value="">Choose a club</option>
-                {myClubs.map((club) => (
-                  <option key={club._id} value={club._id}>
-                    {club.name}
+            {/* ✅ Only show dropdown if NOT coming from a specific club */}
+            {!clubIdFromUrl ? (
+              <div className="form-group">
+                <label htmlFor="clubId">Select Club *</label>
+                <select
+                  id="clubId"
+                  name="clubId"
+                  value={formData.clubId}
+                  onChange={handleChange}
+                  required
+                  disabled={clubsLoading}
+                >
+                  <option value="">
+                    {clubsLoading ? 'Loading clubs...' : 'Choose a club'}
                   </option>
-                ))}
-              </select>
-            </div>
+                  {myClubs.map((club) => (
+                    <option key={club._id} value={club._id}>
+                      {club.name}
+                    </option>
+                  ))}
+                </select>
+                <small className="form-hint">Select which club is organizing this event</small>
+              </div>
+            ) : clubsLoading ? (
+              <div className="form-group">
+                <label>Club</label>
+                <div className="readonly-field">
+                  <span className="loading-text">⏳ Loading club details...</span>
+                </div>
+                <small className="form-hint">Please wait...</small>
+              </div>
+            ) : (
+              <div className="form-group">
+                <label>Club</label>
+                {myClubs.find(c => c._id === clubIdFromUrl) ? (
+                  <div className="readonly-field">
+                    {myClubs.find(c => c._id === clubIdFromUrl).name}
+                  </div>
+                ) : (
+                  <div className="readonly-field" style={{ backgroundColor: '#fee2e2', borderColor: '#f87171' }}>
+                    ⚠️ Club not accessible
+                  </div>
+                )}
+                <small className="form-hint" style={!myClubs.find(c => c._id === clubIdFromUrl) ? { color: '#dc2626' } : {}}>
+                  {myClubs.find(c => c._id === clubIdFromUrl) 
+                    ? 'Event will be created for this club' 
+                    : 'You do not have permission to create events for this club. Check browser console (F12) for details.'}
+                </small>
+              </div>
+            )}
 
             <div className="form-group">
               <label htmlFor="name">Event Name *</label>

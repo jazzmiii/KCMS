@@ -9,7 +9,7 @@ const EventsPage = () => {
   const { user } = useAuth();
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('published');
+  const [filter, setFilter] = useState('upcoming');
 
   useEffect(() => {
     fetchEvents();
@@ -19,20 +19,29 @@ const EventsPage = () => {
     setLoading(true);
     try {
       const params = {};
-      if (filter !== 'all') params.status = filter;
+      
+      // ✅ Map filter to appropriate params
+      if (filter === 'upcoming') {
+        params.status = 'published';
+        params.upcoming = true; // Only future events
+      } else if (filter === 'ongoing') {
+        params.status = 'ongoing';
+      } else if (filter === 'completed') {
+        params.status = 'completed';
+      } else if (filter === 'draft' || filter === 'pending_coordinator' || filter === 'pending_admin') {
+        params.status = filter;
+      }
+      // 'all' = no status filter
 
       const response = await eventService.list(params);
-      setEvents(response.data?.data?.events || []);
+      // ✅ Fixed: eventService.list already returns response.data, so we access .data.events (not .data.data.events)
+      setEvents(response.data?.events || []);
     } catch (error) {
       console.error('Error fetching events:', error);
     } finally {
       setLoading(false);
     }
   };
-
-  const canCreateEvent = user?.roles?.scoped?.some(cr => 
-    cr.role === 'president' || cr.role === 'core'
-  ) || user?.roles?.global === 'admin';
 
   const getStatusBadgeClass = (status) => {
     switch (status) {
@@ -52,11 +61,6 @@ const EventsPage = () => {
             <h1>Events</h1>
             <p>Discover and participate in exciting club events</p>
           </div>
-          {canCreateEvent && (
-            <Link to="/events/create" className="btn btn-primary">
-              + Create Event
-            </Link>
-          )}
         </div>
 
         {/* Filters */}
@@ -66,25 +70,25 @@ const EventsPage = () => {
               className={`filter-btn ${filter === 'all' ? 'active' : ''}`}
               onClick={() => setFilter('all')}
             >
-              All
+               All
             </button>
             <button
-              className={`filter-btn ${filter === 'published' ? 'active' : ''}`}
-              onClick={() => setFilter('published')}
+              className={`filter-btn ${filter === 'upcoming' ? 'active' : ''}`}
+              onClick={() => setFilter('upcoming')}
             >
-              Upcoming
+               Upcoming
             </button>
             <button
               className={`filter-btn ${filter === 'ongoing' ? 'active' : ''}`}
               onClick={() => setFilter('ongoing')}
             >
-              Ongoing
+               Ongoing
             </button>
             <button
               className={`filter-btn ${filter === 'completed' ? 'active' : ''}`}
               onClick={() => setFilter('completed')}
             >
-              Completed
+               Completed
             </button>
           </div>
         </div>
@@ -102,18 +106,18 @@ const EventsPage = () => {
               const isValidDate = !isNaN(eventDate.getTime());
               
               return (
-              <div key={event._id} className="event-card">
-                <div className="event-card-header">
-                  <div className="event-date-badge">
-                    <span className="day">{isValidDate ? eventDate.getDate() : '--'}</span>
-                    <span className="month">
-                      {isValidDate ? eventDate.toLocaleString('default', { month: 'short' }) : '---'}
+                <div key={event._id} className="event-card">
+                  <div className="event-card-header">
+                    <div className="event-date-badge">
+                      <span className="day">{isValidDate ? eventDate.getDate() : '--'}</span>
+                      <span className="month">
+                        {isValidDate ? eventDate.toLocaleString('default', { month: 'short' }) : '---'}
+                      </span>
+                    </div>
+                    <span className={`badge ${getStatusBadgeClass(event.status)}`}>
+                      {event.status}
                     </span>
                   </div>
-                  <span className={`badge ${getStatusBadgeClass(event.status)}`}>
-                    {event.status}
-                  </span>
-                </div>
 
                 <div className="event-card-body">
                   <h3>{event.title || event.name}</h3>

@@ -25,10 +25,10 @@ const ClubDetailPage = () => {
         clubService.getClub(clubId),
         eventService.list({ clubId, limit: 10 }),
       ]);
-      // Backend: successResponse(res, { club }) → { status, data: { club: {...} } }
-      // clubService returns response.data → { status, data: { club: {...} } }
-      setClub(clubRes.data?.club);
-      setEvents(eventsRes.data?.events || []);
+      // ✅ FIX: Axios returns full response object
+      // Structure: response.data = { status, data: { club/events } }
+      setClub(clubRes.data?.data?.club || clubRes.data?.club);
+      setEvents(eventsRes.data?.data?.events || eventsRes.data?.events || []);
     } catch (error) {
       console.error('Error fetching club details:', error);
     } finally {
@@ -62,9 +62,15 @@ const ClubDetailPage = () => {
   const isAssignedCoordinator = user?.roles?.global === 'coordinator' && 
                                  club?.coordinator?._id === user._id;
   
+  // ✅ Check if user has management role (president or core team)
+  const coreRoles = ['president', 'core', 'vicePresident', 'secretary', 'treasurer', 'leadPR', 'leadTech'];
+  const hasManagementRole = user?.roles?.scoped?.some(cr => 
+    cr.club?.toString() === clubId && coreRoles.includes(cr.role)
+  );
+  
   const canManage = user?.roles?.global === 'admin' || 
                     isAssignedCoordinator ||
-                    user?.roles?.scoped?.some(cr => cr.club?.toString() === clubId && cr.role === 'president');
+                    hasManagementRole;
 
   return (
     <Layout>
@@ -191,17 +197,17 @@ const ClubDetailPage = () => {
                   {events.map((event) => (
                     <div key={event._id} className="event-card">
                       <div className="event-date-badge">
-                        <span className="day">{new Date(event.date).getDate()}</span>
+                        <span className="day">{new Date(event.dateTime).getDate()}</span>
                         <span className="month">
-                          {new Date(event.date).toLocaleString('default', { month: 'short' })}
+                          {new Date(event.dateTime).toLocaleString('default', { month: 'short' })}
                         </span>
                       </div>
                       <div className="event-details">
-                        <h3>{event.name}</h3>
+                        <h3>{event.title}</h3>
                         <p className="event-description">{event.description}</p>
                         <div className="event-meta">
                           <span>📍 {event.venue}</span>
-                          <span>🕐 {new Date(event.date).toLocaleTimeString('en-US', { 
+                          <span>🕐 {new Date(event.dateTime).toLocaleTimeString('en-US', { 
                             hour: '2-digit', 
                             minute: '2-digit' 
                           })}</span>

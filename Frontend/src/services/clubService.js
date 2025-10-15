@@ -33,9 +33,21 @@ const clubService = {
     return response.data;
   },
 
+  // Reject Protected Settings (Coordinator only)
+  rejectSettings: async (clubId) => {
+    const response = await api.post(`/clubs/${clubId}/settings/reject`);
+    return response.data;
+  },
+
   // Archive Club
   archiveClub: async (clubId) => {
     const response = await api.delete(`/clubs/${clubId}`);
+    return response.data;
+  },
+
+  // Restore Archived Club (Admin only)
+  restoreClub: async (clubId) => {
+    const response = await api.post(`/clubs/${clubId}/restore`);
     return response.data;
   },
 

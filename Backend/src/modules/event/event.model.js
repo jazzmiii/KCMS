@@ -40,6 +40,9 @@ const EventSchema = new mongoose.Schema(
     },
     reportSubmittedAt: Date,
     reportDueDate: Date,
+    rejectionReason: String, // Reason for rejection
+    rejectedBy: { type: mongoose.Types.ObjectId, ref: 'User' }, // Who rejected
+    rejectedAt: Date, // When rejected
     coordinatorOverride: {
       overridden: { type: Boolean, default: false },
       type: String, // 'budget_rejection', 'budget_reduction', 'event_cancellation'

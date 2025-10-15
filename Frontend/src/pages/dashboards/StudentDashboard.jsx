@@ -34,7 +34,7 @@ const StudentDashboard = () => {
       const [myClubsRes, allClubsRes, eventsRes, recruitmentsRes] = await Promise.all([
         userService.getMyClubs(), // Get student's clubs (where they are member/core/president)
         clubService.listClubs({ limit: 8, status: 'active', _t: timestamp }), // Get all active clubs
-        eventService.list({ limit: 10, status: 'published' }),
+        eventService.list({ limit: 10, status: 'published', upcoming: true }), // ✅ Only future events
         recruitmentService.list({ limit: 5, status: 'open' }),
       ]);
 
@@ -235,9 +235,16 @@ const StudentDashboard = () => {
                       {membership.role}
                     </span>
                   </div>
-                  <Link to={`/clubs/${membership.club._id}/dashboard`} className="btn btn-primary btn-sm">
-                    Dashboard
-                  </Link>
+                  {/* ✅ Smart routing: members see detail page, core team sees dashboard */}
+                  {membership.role === 'member' ? (
+                    <Link to={`/clubs/${membership.club._id}`} className="btn btn-outline btn-sm">
+                      View Club
+                    </Link>
+                  ) : (
+                    <Link to={`/clubs/${membership.club._id}/dashboard`} className="btn btn-primary btn-sm">
+                      Dashboard
+                    </Link>
+                  )}
                 </div>
               ))}
             </div>

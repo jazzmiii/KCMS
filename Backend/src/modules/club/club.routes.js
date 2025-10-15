@@ -8,7 +8,9 @@ const {
   requireEither, 
   requireAssignedCoordinator,
   requireAdminOrCoordinatorOrClubRole,
-  requirePresident
+  requirePresident,
+  CORE_AND_PRESIDENT,  // All core roles + president
+  PRESIDENT_ONLY       // President only
 } = require('../../middlewares/permission');
 const validate     = require('../../middlewares/validate');
 const { validateUpload } = require('../../middlewares/fileValidator');
@@ -63,16 +65,34 @@ router.post(
   ctrl.approveSettings
 );
 
+// Reject protected settings (Assigned Coordinator only - Section 3.3)
+router.post(
+  '/:clubId/settings/reject',
+  authenticate,
+  requireAssignedCoordinator(), // Admin OR Assigned Coordinator only
+  validate(v.clubId, 'params'),
+  ctrl.rejectSettings
+);
+
 // NOTE: Club approval route removed - Admin creates clubs directly as 'active'
-// Only settings changes require coordinator approval (see /settings/approve above)
+// Only settings changes require coordinator approval (see /settings/approve and /settings/reject above)
 
 // Archive Club (Admin OR Club President ONLY - Section 3.3)
 router.delete(
   '/:clubId',
   authenticate,
-  requirePresident(), // ✅ Admin OR ONLY Club President
+  requirePresident(), // Admin OR ONLY Club President
   validate(v.clubId, 'params'),
   ctrl.archiveClub
+);
+
+// Restore Archived Club (Admin only)
+router.post(
+  '/:clubId/restore',
+  authenticate,
+  requireAdmin(), // Admin only
+  validate(v.clubId, 'params'),
+  ctrl.restoreClub
 );
 
 // Get club members (Members can view, Core+ can manage - Section 2.2)
@@ -89,7 +109,7 @@ router.get(
 router.post(
   '/:clubId/members',
   authenticate,
-  requireEither(['admin'], ['core', 'president']), // Admin OR Club Core+
+  requireEither(['admin'], CORE_AND_PRESIDENT), // ✅ Admin OR Core+President
   validate(v.clubId, 'params'),
   validate(v.addMemberSchema),
   ctrl.addMember

@@ -105,7 +105,13 @@ function NotificationsPage() {
         }
         break;
       case 'approval_required':
-        navigate('/coordinator/dashboard');
+        // Navigate to the specific event that needs approval
+        if (payload.eventId) {
+          navigate(`/events/${payload.eventId}`);
+        } else {
+          // Fallback to dashboard
+          navigate('/dashboard');
+        }
         break;
       case 'role_assigned':
         navigate('/profile');

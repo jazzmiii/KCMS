@@ -52,7 +52,7 @@ exports.list = async (req, res, next) => {
 
 exports.getById = async (req, res, next) => {
   try {
-    const rec = await recruitmentService.getById(req.params.id);
+    const rec = await recruitmentService.getById(req.params.id, req.user);
     successResponse(res, { recruitment: rec });
   } catch (err) {
     next(err);

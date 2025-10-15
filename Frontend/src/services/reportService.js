@@ -37,9 +37,9 @@ const reportService = {
 
   // Generate club activity report PDF (Coordinator/Admin only)
   generateClubActivityReport: async (clubId, year) => {
-    const response = await api.post(
+    // ✅ FIX: Backend route is GET, not POST (see report.routes.js Line 53)
+    const response = await api.get(
       `/reports/clubs/${clubId}/activity/${year}`,
-      {},
       { responseType: 'blob' }
     );
     return response;

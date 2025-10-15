@@ -1,25 +1,38 @@
 const jwtUtil = require('../utils/jwt');
 const { User } = require('../modules/auth/user.model');
 
-module.exports = async function auth(req, res, next) {
+/**
+ * Optional Authentication Middleware
+ * Extracts user info if token is present, but doesn't fail if not
+ * Used for endpoints that are public but behavior changes if authenticated
+ */
+module.exports = async function optionalAuth(req, res, next) {
   try {
     const hdr = req.headers['authorization'] || '';
     const parts = hdr.split(' ');
+    
+    // If no auth header, continue without user
     if (parts.length !== 2 || parts[0] !== 'Bearer') {
-      return res.status(401).json({ message: 'Missing or invalid Authorization header' });
+      req.user = null;
+      return next();
     }
 
     const token = parts[1];
     let payload;
+    
     try {
       payload = jwtUtil.verify(token);
     } catch (err) {
-      const reason = err.name === 'TokenExpiredError' ? 'expired' : 'invalid';
-      return res.status(401).json({ message: 'Unauthorized token', reason });
+      // Token invalid/expired - continue without user
+      req.user = null;
+      return next();
     }
 
     const user = await User.findById(payload.id || payload.sub).lean();
-    if (!user) return res.status(401).json({ message: 'User not found' });
+    if (!user) {
+      req.user = null;
+      return next();
+    }
 
     // ✅ Fetch user's club memberships from Membership collection (SINGLE SOURCE OF TRUTH)
     const { Membership } = require('../modules/club/membership.model');
@@ -32,7 +45,7 @@ module.exports = async function auth(req, res, next) {
     const scopedRoles = memberships.map(m => ({
       club: m.club._id,
       role: m.role,
-      clubName: m.club.name // Extra info for convenience
+      clubName: m.club.name
     }));
 
     req.user = {
@@ -45,8 +58,11 @@ module.exports = async function auth(req, res, next) {
       },
       status: user.status,
     };
+    
     return next();
   } catch (err) {
-    return next(err);
+    // On any error, continue without user
+    req.user = null;
+    return next();
   }
 };

@@ -132,9 +132,8 @@ const Layout = ({ children }) => {
   const getDashboardLink = () => {
     if (user?.roles?.global === 'admin') return '/admin/dashboard';
     if (user?.roles?.global === 'coordinator') return '/coordinator/dashboard';
-    if (user?.roles?.scoped?.some(cr => cr.role === 'core' || cr.role === 'president')) {
-      return '/core/dashboard';
-    }
+    // ✅ All students (including those with club roles) go to StudentDashboard
+    // They can access individual club dashboards from "My Clubs" section
     return '/dashboard';
   };
 

@@ -132,10 +132,33 @@ class RecruitmentService {
     return { total, page, limit, items };
   }
 
-  async getById(id) {
-    const rec = await Recruitment.findById(id);
+  async getById(id, userContext) {
+    const rec = await Recruitment.findById(id).populate('club', 'name');
     if (!rec) throw Object.assign(new Error('Not found'), { statusCode: 404 });
-    return rec;
+    
+    const data = rec.toObject();
+    
+    // ✅ Add canManage flag (BACKEND is SOURCE OF TRUTH)
+    if (userContext && userContext.id) {
+      const isAdmin = userContext.roles?.global === 'admin';
+      
+      // Check club membership
+      const { Membership } = require('../club/membership.model');
+      const membership = await Membership.findOne({
+        user: userContext.id,
+        club: rec.club,
+        status: 'approved'
+      });
+      
+      const coreRoles = ['president', 'core', 'vicePresident', 'secretary', 'treasurer', 'leadPR', 'leadTech'];
+      const hasClubRole = membership && coreRoles.includes(membership.role);
+      
+      data.canManage = isAdmin || hasClubRole;
+    } else {
+      data.canManage = false;
+    }
+    
+    return data;
   }
 
   async apply(id, userId, answers, userContext) {
@@ -199,7 +222,7 @@ class RecruitmentService {
   }
 
   async reviewApplication(appId, data, userContext) {
-    const app = await Application.findById(appId);
+    const app = await Application.findById(appId).populate('recruitment');
     if (!app) throw Object.assign(new Error('Not found'), { statusCode: 404 });
     const prevStatus = app.status;
 
@@ -218,12 +241,19 @@ class RecruitmentService {
     });
 
     if (data.status === 'selected') {
+      // Get clubId from recruitment, not from app.recruitment (which is recruitmentId)
+      const clubId = app.recruitment.club;
+      
+      // Create Membership record
       await Membership.create({
-        club: app.recruitment,
+        club: clubId,
         user: app.user,
-        role: 'member',
+        role: data.assignedRole || 'member', // Allow custom role assignment
         status: 'approved'
       });
+
+      // ✅ Membership collection is SINGLE SOURCE OF TRUTH - no need to sync User.roles.scoped
+      console.log(`✅ User ${app.user} assigned role '${data.assignedRole || 'member'}' in club ${clubId}`);
     }
 
     await notificationService.create({

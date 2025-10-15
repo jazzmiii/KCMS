@@ -1,4 +1,4 @@
-const { hasGlobalRole, hasScopedRole, hasClubMembership } = require('../utils/rbac');
+const { hasGlobalRole, hasClubMembership } = require('../utils/rbac');
 const { errorResponse } = require('../utils/response');
 
 function normalizeRole(r) {
@@ -7,22 +7,33 @@ function normalizeRole(r) {
 
 /**
  * Core team roles (all positions that are considered "core" level)
+ * These roles have elevated permissions compared to regular members
  */
 const CORE_ROLES = ['core', 'vicePresident', 'secretary', 'treasurer', 'leadPR', 'leadTech'];
 
 /**
- * Check if a role is a core team role
+ * All management roles (core team + president)
+ */
+const CORE_AND_PRESIDENT = [...CORE_ROLES, 'president'];
+
+/**
+ * Check if a role is a core team role (including president)
  */
 function isCoreRole(role) {
-  return CORE_ROLES.includes(role);
+  return CORE_AND_PRESIDENT.includes(role);
 }
 
 /**
- * Check if a role is president or higher
+ * Check if a role is president only
  */
-function isPresidentOrHigher(role) {
+function isPresidentOnly(role) {
   return role === 'president';
 }
+
+// ✅ Export these constants for use in routes
+module.exports.CORE_ROLES = CORE_ROLES;
+module.exports.CORE_AND_PRESIDENT = CORE_AND_PRESIDENT;
+module.exports.PRESIDENT_ONLY = ['president'];
 
 /**
  * Check if user has required global role
@@ -37,20 +48,8 @@ function checkGlobalRole(user, allowed = []) {
 }
 
 /**
- * Check if user has required scoped role for a specific club
- * @param {Object} user - User object with roles
- * @param {string} clubId - Club ID to check
- * @param {string[]} allowed - Array of allowed scoped roles
- * @returns {boolean}
- */
-function checkScopedRole(user, clubId, allowed = []) {
-  if (!user || !user.roles || !user.roles.scoped) return false;
-  if (!clubId) return false;
-  return hasScopedRole(user, clubId, allowed);
-}
-
-/**
  * Comprehensive permission checker that handles both global and scoped roles
+ * Uses Membership collection as SINGLE SOURCE OF TRUTH for scoped roles
  * @param {Object} options - Permission options
  * @param {string[]} options.global - Required global roles
  * @param {string[]} options.scoped - Required scoped roles  
@@ -65,7 +64,7 @@ exports.permit = (options = {}) => {
     allowGlobalOverride = true 
   } = options;
 
-  return (req, res, next) => {
+  return async (req, res, next) => {
     // Check authentication
     if (!req.user) {
       return errorResponse(res, 401, 'Authentication required');
@@ -92,9 +91,18 @@ exports.permit = (options = {}) => {
         return errorResponse(res, 400, `${clubParam} is required for this operation`);
       }
 
-      const hasScoped = checkScopedRole(req.user, clubId, scoped);
-      if (!hasScoped) {
-        return errorResponse(res, 403, `Insufficient club permissions for ${clubParam}: ${clubId}`);
+      try {
+        // ✅ Use Membership collection (SINGLE SOURCE OF TRUTH)
+        const hasScoped = await hasClubMembership(req.user.id, clubId, scoped);
+        
+        if (!hasScoped) {
+          return errorResponse(res, 403, `Insufficient club permissions for ${clubParam}: ${clubId}`);
+        }
+        
+        return next();
+      } catch (error) {
+        console.error('Error checking scoped permissions:', error);
+        return errorResponse(res, 500, 'Error checking permissions');
       }
     }
 
@@ -132,22 +140,12 @@ exports.requireScoped = (allowed = [], clubParam = 'clubId') => {
  * @param {string} clubParam - Parameter name for clubId
  */
 exports.requireEither = (globalRoles = [], scopedRoles = [], clubParam = 'clubId') => {
-  return (req, res, next) => {
-    console.log('🔍 requireEither Debug:', {
-      userId: req.user?.id,
-      userRole: req.user?.roles?.global,
-      requiredGlobal: globalRoles,
-      requiredScoped: scopedRoles,
-      clubId: req.params[clubParam]
-    });
-    
-    return exports.permit({ 
-      global: globalRoles, 
-      scoped: scopedRoles, 
-      clubParam,
-      allowGlobalOverride: true 
-    })(req, res, next);
-  };
+  return exports.permit({ 
+    global: globalRoles, 
+    scoped: scopedRoles, 
+    clubParam,
+    allowGlobalOverride: true 
+  });
 };
 
 /**
@@ -258,8 +256,7 @@ exports.requireAdminOrCoordinatorOrClubRole = (clubRoles = [], clubParam = 'club
       }
     }
 
-    // ✅ FIXED: Check club roles via Membership collection (SINGLE SOURCE OF TRUTH)
-    // This is the proper way since User.roles.scoped is not always synced
+    // ✅ Check club roles via Membership collection (SINGLE SOURCE OF TRUTH)
     if (clubRoles.length > 0) {
       const hasMembership = await hasClubMembership(req.user.id, clubId, clubRoles);
       if (hasMembership) {
@@ -273,10 +270,11 @@ exports.requireAdminOrCoordinatorOrClubRole = (clubRoles = [], clubParam = 'club
 
 /**
  * Require president role ONLY (not core team)
+ * Uses Membership collection as SINGLE SOURCE OF TRUTH
  * @param {string} clubParam - Parameter name for clubId
  */
 exports.requirePresident = (clubParam = 'clubId') => {
-  return (req, res, next) => {
+  return async (req, res, next) => {
     if (!req.user) {
       return errorResponse(res, 401, 'Authentication required');
     }
@@ -292,21 +290,29 @@ exports.requirePresident = (clubParam = 'clubId') => {
       return errorResponse(res, 400, `${clubParam} is required`);
     }
 
-    // Check if user is president of this club
-    const membership = req.user.roles?.scoped?.find(
-      sc => sc.club.toString() === clubId
-    );
+    try {
+      // ✅ Use Membership collection (SINGLE SOURCE OF TRUTH)
+      const { Membership } = require('../modules/club/membership.model');
+      const membership = await Membership.findOne({
+        user: req.user.id,
+        club: clubId,
+        status: 'approved'
+      });
 
-    if (!membership) {
-      return errorResponse(res, 403, 'Not a member of this club');
+      if (!membership) {
+        return errorResponse(res, 403, 'Not a member of this club');
+      }
+
+      // Check if president
+      if (membership.role !== 'president') {
+        return errorResponse(res, 403, `President access required. Your role: ${membership.role}`);
+      }
+
+      next();
+    } catch (error) {
+      console.error('Error checking president permission:', error);
+      return errorResponse(res, 500, 'Error checking permissions');
     }
-
-    // Check if president
-    if (membership.role !== 'president') {
-      return errorResponse(res, 403, `President access required. Your role: ${membership.role}`);
-    }
-
-    next();
   };
 };
 
@@ -350,9 +356,9 @@ exports.requireAssignedCoordinatorOrClubRoleForEvent = (clubRoles = []) => {
         }
       }
 
-      // Check club roles
+      // Check club roles via Membership collection
       if (clubRoles.length > 0) {
-        const hasClubRole = checkScopedRole(req.user, event.club._id, clubRoles);
+        const hasClubRole = await hasClubMembership(req.user.id, event.club._id.toString(), clubRoles);
         if (hasClubRole) {
           return next();
         }

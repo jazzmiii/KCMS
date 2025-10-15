@@ -22,7 +22,8 @@ const RecruitmentsPage = () => {
       if (filter !== 'all') params.status = filter;
 
       const response = await recruitmentService.list(params);
-      setRecruitments(response.data?.data?.recruitments || []);
+      // ✅ Fixed: recruitmentService.list already returns response.data
+      setRecruitments(response.data?.recruitments || []);
     } catch (error) {
       console.error('Error fetching recruitments:', error);
     } finally {
@@ -46,10 +47,6 @@ const RecruitmentsPage = () => {
     return diff > 0 ? diff : 0;
   };
 
-  const canCreateRecruitment = user?.roles?.scoped?.some(cr => 
-    cr.role === 'president' || cr.role === 'core'
-  );
-
   return (
     <Layout>
       <div className="recruitments-page">
@@ -58,11 +55,6 @@ const RecruitmentsPage = () => {
             <h1>Club Recruitments</h1>
             <p>Apply to join your favorite clubs</p>
           </div>
-          {canCreateRecruitment && (
-            <Link to="/recruitments/create" className="btn btn-primary">
-              + Create Recruitment
-            </Link>
-          )}
         </div>
 
         {/* Filters */}

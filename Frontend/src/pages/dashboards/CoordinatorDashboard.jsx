@@ -15,6 +15,7 @@ const CoordinatorDashboard = () => {
   });
   const [assignedClubs, setAssignedClubs] = useState([]);
   const [pendingEvents, setPendingEvents] = useState([]);
+  const [pendingSettingsClubs, setPendingSettingsClubs] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -26,24 +27,36 @@ const CoordinatorDashboard = () => {
       // Add timestamp to bypass stale cache
       const timestamp = Date.now();
       
-      const [clubsRes, pendingEventsRes, allEventsRes] = await Promise.all([
+      const [clubsRes, allPendingEventsRes, allEventsRes] = await Promise.all([
         clubService.listClubs({ coordinator: user._id, _t: timestamp }),
-        eventService.list({ status: 'pending_coordinator' }),
+        eventService.list({ status: 'pending_coordinator', limit: 100 }),
         eventService.list({ limit: 100 }), // Get all events to count coordinator's events (max 100)
       ]);
 
       // Backend: successResponse(res, { total, clubs }) → { status, data: { total, clubs } }
-      const assignedClubIds = (clubsRes.data?.clubs || []).map(c => c._id);
+      const assignedClubs = clubsRes.data?.clubs || [];
+      const assignedClubIds = assignedClubs.map(c => c._id);
+      
+      // ✅ Filter pending events to only show events from assigned clubs
+      const myPendingEvents = (allPendingEventsRes.data?.events || []).filter(event => 
+        assignedClubIds.includes(event.club?._id)
+      );
+      
       const coordinatorEvents = (allEventsRes.data?.events || []).filter(event => 
         assignedClubIds.includes(event.club?._id)
       );
 
-      setAssignedClubs(clubsRes.data?.clubs || []);
-      setPendingEvents(pendingEventsRes.data?.events || []);
+      // ✅ Count clubs with pending settings changes (president changed sensitive data)
+      const clubsWithPendingSettings = assignedClubs.filter(club => club.pendingSettings);
+
+      setAssignedClubs(assignedClubs);
+      setPendingEvents(myPendingEvents);
+      setPendingSettingsClubs(clubsWithPendingSettings);
 
       setStats({
         assignedClubs: clubsRes.data?.total || 0,
-        pendingEvents: pendingEventsRes.data?.total || 0,
+        // ✅ Pending = Events pending coordinator + Club settings pending approval
+        pendingEvents: myPendingEvents.length + clubsWithPendingSettings.length,
         totalEvents: coordinatorEvents.length,
       });
     } catch (error) {
@@ -55,13 +68,27 @@ const CoordinatorDashboard = () => {
 
   const handleApproveEvent = async (eventId) => {
     try {
-      // Backend expects action: 'approve' (not status: 'approved')
       await eventService.changeStatus(eventId, 'approve');
       alert('Event approved successfully!');
       fetchDashboardData();
     } catch (error) {
-      console.error('Failed to approve event:', error);
       alert('Failed to approve event: ' + (error.response?.data?.message || error.message));
+    }
+  };
+
+  const handleRejectEvent = async (eventId) => {
+    const reason = prompt('Please provide a reason for rejection (minimum 10 characters):');
+    if (!reason || reason.length < 10) {
+      alert('Rejection reason must be at least 10 characters');
+      return;
+    }
+
+    try {
+      await eventService.changeStatus(eventId, 'reject', { reason });
+      alert('Event rejected successfully');
+      fetchDashboardData();
+    } catch (error) {
+      alert('Failed to reject event: ' + (error.response?.data?.message || error.message));
     }
   };
 
@@ -160,7 +187,13 @@ const CoordinatorDashboard = () => {
                             onClick={() => handleApproveEvent(event._id)}
                             className="btn btn-sm btn-success"
                           >
-                            Approve
+                            ✓ Approve
+                          </button>
+                          <button 
+                            onClick={() => handleRejectEvent(event._id)}
+                            className="btn btn-sm btn-danger"
+                          >
+                            ✗ Reject
                           </button>
                         </div>
                       </td>
@@ -170,9 +203,101 @@ const CoordinatorDashboard = () => {
               </table>
             </div>
           ) : (
-            <p className="no-data">No pending approvals</p>
+            <p className="no-data">No pending event approvals</p>
           )}
         </div>
+
+        {/* Pending Club Settings Approvals */}
+        {pendingSettingsClubs.length > 0 && (
+          <div className="dashboard-section">
+            <div className="section-header">
+              <h2>⚙️ Pending Club Settings Approvals</h2>
+              <Link to="/clubs" className="view-all">View All →</Link>
+            </div>
+            <div className="table-container">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Club Name</th>
+                    <th>Category</th>
+                    <th>Changed Fields</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingSettingsClubs.map((club) => {
+                    const changedFields = club.pendingSettings 
+                      ? Object.keys(club.pendingSettings).join(', ') 
+                      : 'Multiple fields';
+                    return (
+                      <tr key={club._id}>
+                        <td>
+                          <div className="table-cell-with-icon">
+                            {club.logoUrl ? (
+                              <img src={club.logoUrl} alt={club.name} className="table-icon" />
+                            ) : (
+                              <div className="table-icon-placeholder">{club.name.charAt(0)}</div>
+                            )}
+                            <span>{club.name}</span>
+                          </div>
+                        </td>
+                        <td><span className="badge badge-info">{club.category}</span></td>
+                        <td>
+                          <span className="badge badge-warning">{changedFields}</span>
+                          {/* Show pending values */}
+                          <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '0.25rem' }}>
+                            {club.pendingSettings && Object.entries(club.pendingSettings).map(([key, value]) => (
+                              <div key={key}>
+                                <strong>{key}:</strong> {value}
+                              </div>
+                            ))}
+                          </div>
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                            <button 
+                              onClick={async () => {
+                                if (!window.confirm('Approve these changes?')) return;
+                                try {
+                                  await clubService.approveSettings(club._id);
+                                  alert('✅ Changes approved successfully!');
+                                  window.location.reload();
+                                } catch (err) {
+                                  alert(err.response?.data?.message || 'Failed to approve changes');
+                                }
+                              }}
+                              className="btn btn-sm btn-success"
+                            >
+                              ✓ Approve
+                            </button>
+                            <button 
+                              onClick={async () => {
+                                if (!window.confirm('Reject these changes?')) return;
+                                try {
+                                  await clubService.rejectSettings(club._id);
+                                  alert('✅ Changes rejected');
+                                  window.location.reload();
+                                } catch (err) {
+                                  alert(err.response?.data?.message || 'Failed to reject changes');
+                                }
+                              }}
+                              className="btn btn-sm btn-danger"
+                            >
+                              ✗ Reject
+                            </button>
+                            <Link to={`/clubs/${club._id}`} className="btn btn-sm btn-outline">
+                              View Club
+                            </Link>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         {/* Assigned Clubs */}
         <div className="dashboard-section">
