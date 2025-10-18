@@ -5,11 +5,12 @@ import Layout from '../../components/Layout';
 import clubService from '../../services/clubService';
 import eventService from '../../services/eventService';
 import { getClubLogoUrl, getClubLogoPlaceholder } from '../../utils/imageUtils';
+import { hasCoreMemberRole, ROLE_DISPLAY_NAMES } from '../../utils/roleConstants';
 import '../../styles/Clubs.css';
 
 const ClubDetailPage = () => {
   const { clubId } = useParams();
-  const { user } = useAuth();
+  const { user, clubMemberships } = useAuth();
   const [club, setClub] = useState(null);
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -59,14 +60,13 @@ const ClubDetailPage = () => {
   }
 
   // ✅ Check if coordinator is assigned to THIS specific club
+  const coordinatorId = club?.coordinator?._id || club?.coordinator;
+  const userId = user?._id?.toString() || user?._id;
   const isAssignedCoordinator = user?.roles?.global === 'coordinator' && 
-                                 club?.coordinator?._id === user._id;
+                                 coordinatorId?.toString() === userId;
   
-  // ✅ Check if user has management role (president or core team)
-  const coreRoles = ['president', 'core', 'vicePresident', 'secretary', 'treasurer', 'leadPR', 'leadTech'];
-  const hasManagementRole = user?.roles?.scoped?.some(cr => 
-    cr.club?.toString() === clubId && coreRoles.includes(cr.role)
-  );
+  // ✅ Check if user has management role using clubMemberships (SINGLE SOURCE OF TRUTH)
+  const hasManagementRole = hasCoreMemberRole(clubMemberships, clubId);
   
   const canManage = user?.roles?.global === 'admin' || 
                     isAssignedCoordinator ||

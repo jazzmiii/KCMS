@@ -129,7 +129,10 @@ class ClubService {
     const cached = _t ? null : await redis.get(key);
     if (cached) return JSON.parse(cached);
 
-    const query = { status: status || 'active' }; // Support status filter (active/archived)
+    // ✅ Default includes both active and pending_archive (functionally active)
+    const query = status 
+      ? { status } 
+      : { status: { $in: ['active', 'pending_archive'] } };
     if (category) query.category = category;
     if (search) query.name = new RegExp(search, 'i');
     if (coordinator) query.coordinator = coordinator; // Filter by assigned coordinator
@@ -167,7 +170,8 @@ class ClubService {
   async getClub(clubId, userContext) {
     const club = await Club.findById(clubId)
       .populate('coordinator', 'profile.name email roles.global');
-    if (!club || club.status !== 'active') {
+    // ✅ Treat pending_archive as active - club remains functional until coordinator approves
+    if (!club || (club.status !== 'active' && club.status !== 'pending_archive')) {
       const err = new Error('Club not found');
       err.statusCode = 404;
       throw err;
@@ -413,32 +417,141 @@ class ClubService {
     );
   }
 
-  // Archive (soft-delete) a club
-  async archiveClub(clubId, userContext) {
+  // Archive (soft-delete) a club - Requires coordinator approval if requested by leadership
+  async archiveClub(clubId, reason, userContext) {
+    const club = await Club.findById(clubId).populate('coordinator', 'profile.name');
+    if (!club) throw Object.assign(new Error('Club not found'), { statusCode: 404 });
+    
+    const { User } = require('../auth/user.model');
+    const requester = await User.findById(userContext.id);
+    const isAdmin = requester?.roles?.global === 'admin';
+    
+    const prevStatus = club.status;
+    
+    if (isAdmin) {
+      // Admin can archive directly
+      club.status = 'archived';
+      
+      await auditService.log({
+        user: userContext.id,
+        action: 'CLUB_ARCHIVE',
+        target: `Club:${clubId}`,
+        oldValue: { status: prevStatus },
+        newValue: { status: 'archived' },
+        ip: userContext.ip,
+        userAgent: userContext.userAgent
+      });
+    } else {
+      // Leadership requests archive - needs coordinator approval
+      console.log(`🔄 [Archive] Setting club status to pending_archive. Current: ${club.status}`);
+      club.status = 'pending_archive';
+      club.archiveRequest = {
+        requestedBy: userContext.id,
+        requestedAt: new Date(),
+        reason: reason || 'Leadership requested to archive this club'
+      };
+      console.log(`✅ [Archive] Status set to: ${club.status}, archiveRequest created`);
+      
+      // Notify coordinator
+      await notificationService.create({
+        user: club.coordinator._id,
+        type: 'approval_required',
+        payload: { 
+          clubId: clubId,
+          clubName: club.name,
+          requestedBy: requester.profile?.name || 'Club Leadership',
+          reason: reason
+        },
+        priority: 'HIGH'
+      });
+      
+      await auditService.log({
+        user: userContext.id,
+        action: 'CLUB_ARCHIVE_REQUEST',
+        target: `Club:${clubId}`,
+        oldValue: { status: prevStatus },
+        newValue: { status: 'pending_archive', reason },
+        ip: userContext.ip,
+        userAgent: userContext.userAgent
+      });
+    }
+    
+    console.log(`💾 [Archive] Saving club. Status before save: ${club.status}`);
+    await club.save();
+    console.log(`✅ [Archive] Club saved. Status after save: ${club.status}`);
+    console.log(`🔍 [Archive] Returning club with status: ${club.status}, archiveRequest: ${!!club.archiveRequest}`);
+    await this.flushCache();
+    return club;
+  }
+  
+  // Approve or reject archive request (Coordinator only)
+  async approveArchiveRequest(clubId, decision, userContext) {
     const club = await Club.findById(clubId);
     if (!club) throw Object.assign(new Error('Club not found'), { statusCode: 404 });
+    
+    console.log(`🔍 [Approve Archive] Club: ${club.name}, Current Status: ${club.status}, Decision: ${decision}`);
+    
+    if (club.status !== 'pending_archive') {
+      throw Object.assign(new Error('No pending archive request for this club'), { statusCode: 400 });
+    }
+    
+    // Verify coordinator
+    const isCoordinator = await this.isAssignedCoordinator(userContext.id, clubId);
+    if (!isCoordinator) {
+      throw Object.assign(new Error('Only assigned coordinator can approve archive requests'), { statusCode: 403 });
+    }
+    
     const prevStatus = club.status;
-    club.status = 'archived';
-    await club.save();
-
-    // Notify core team
-    await notificationService.create({
-      user: userContext.id,
-      type: 'system_maintenance',   // or 'club_archived'
-      payload: { clubId },
-      priority: 'HIGH'
-    });
-
+    
+    if (decision === 'approve') {
+      console.log(`✅ [Approve Archive] Approving - Setting status to 'archived'`);
+      club.status = 'archived';
+      
+      // Notify requester
+      await notificationService.create({
+        user: club.archiveRequest.requestedBy,
+        type: 'request_approved',
+        payload: { 
+          clubId: clubId,
+          clubName: club.name,
+          message: 'Your archive request has been approved by the coordinator'
+        },
+        priority: 'HIGH'
+      });
+    } else {
+      // Rejected - restore to active
+      console.log(`❌ [Approve Archive] Rejecting - Setting status to 'active'`);
+      club.status = 'active';
+      
+      // Notify requester
+      await notificationService.create({
+        user: club.archiveRequest.requestedBy,
+        type: 'request_rejected',
+        payload: { 
+          clubId: clubId,
+          clubName: club.name,
+          message: 'Your archive request has been rejected by the coordinator'
+        },
+        priority: 'HIGH'
+      });
+    }
+    
+    // Clear archive request
+    club.archiveRequest = undefined;
+    
     await auditService.log({
       user: userContext.id,
-      action: 'CLUB_ARCHIVE',
+      action: decision === 'approve' ? 'CLUB_ARCHIVE_APPROVED' : 'CLUB_ARCHIVE_REJECTED',
       target: `Club:${clubId}`,
       oldValue: { status: prevStatus },
-      newValue: { status: 'archived' },
+      newValue: { status: club.status },
       ip: userContext.ip,
       userAgent: userContext.userAgent
     });
-
+    
+    console.log(`💾 [Approve Archive] Saving club with status: ${club.status}`);
+    await club.save();
+    console.log(`✅ [Approve Archive] Saved! Final status: ${club.status}`);
     await this.flushCache();
     return club;
   }
@@ -496,6 +609,13 @@ class ClubService {
     return { total, page, limit, members };
   }
 
+  // Helper: Check if a coordinator is assigned to a specific club
+  async isAssignedCoordinator(coordinatorId, clubId) {
+    const club = await Club.findById(clubId);
+    if (!club) return false;
+    return club.coordinator?.toString() === coordinatorId.toString();
+  }
+
   // Add member to club
   async addMember(clubId, userId, role, userContext) {
     // Import User model to check global role
@@ -523,6 +643,99 @@ class ClubService {
       throw err;
     }
 
+    // ✅ ACCESS CONTROL: Check who is adding the member
+    const adderMembership = await Membership.findOne({ club: clubId, user: userContext.id });
+    // Get the adder's user object to check their global role
+    const adder = await User.findById(userContext.id);
+    const adderGlobalRole = adder?.roles?.global;
+    
+    const CORE_ROLES = ['core', 'secretary', 'treasurer', 'leadPR', 'leadTech'];
+    const LEADERSHIP_ROLES = ['president', 'vicePresident'];
+    const ELEVATED_ROLES = [...CORE_ROLES, ...LEADERSHIP_ROLES];
+    
+    // ✅ LEADERSHIP ROLES: Only assigned coordinator or admin can assign president/vicePresident
+    if (LEADERSHIP_ROLES.includes(role)) {
+      const isAdmin = adderGlobalRole === 'admin';
+      const isAssignedCoordinator = adderGlobalRole === 'coordinator' && await this.isAssignedCoordinator(userContext.id, clubId);
+      
+      if (!isAdmin && !isAssignedCoordinator) {
+        const err = new Error('Only Admin or Assigned Coordinator can assign Sr Club Head (President) or Jr Club Head (Vice President) roles.');
+        err.statusCode = 403;
+        throw err;
+      }
+    }
+    
+    // ✅ CORE ROLES: Only admin or club leadership can assign (NOT coordinator, NOT core members)
+    if (CORE_ROLES.includes(role)) {
+      const isAdmin = adderGlobalRole === 'admin';
+      const isLeadership = adderMembership && LEADERSHIP_ROLES.includes(adderMembership.role);
+      
+      if (!isAdmin && !isLeadership) {
+        const err = new Error('Only Admin or Club Leadership (President/Vice President) can assign core team roles. Core members can only add regular members.');
+        err.statusCode = 403;
+        throw err;
+      }
+    }
+    
+    // ✅ MEMBER ROLE: Admin, leadership, or core members can assign
+    if (role === 'member') {
+      const isAdmin = adderGlobalRole === 'admin';
+      const isLeadership = adderMembership && LEADERSHIP_ROLES.includes(adderMembership.role);
+      const isCoreTeam = adderMembership && CORE_ROLES.includes(adderMembership.role);
+      
+      if (!isAdmin && !isLeadership && !isCoreTeam) {
+        const err = new Error('Only Admin, Club Leadership, or Core Team members can add regular members.');
+        err.statusCode = 403;
+        throw err;
+      }
+    }
+
+    // ✅ ONE PRESIDENT PER CLUB: Check if president already exists
+    if (role === 'president') {
+      const existingPresident = await Membership.findOne({
+        club: clubId,
+        role: 'president',
+        status: 'approved'
+      });
+      
+      if (existingPresident) {
+        const err = new Error('This club already has a Sr Club Head (President). There can only be one President per club.');
+        err.statusCode = 400;
+        throw err;
+      }
+    }
+    
+    // ✅ ONE VICE PRESIDENT PER CLUB: Check if vice president already exists
+    if (role === 'vicePresident') {
+      const existingVP = await Membership.findOne({
+        club: clubId,
+        role: 'vicePresident',
+        status: 'approved'
+      });
+      
+      if (existingVP) {
+        const err = new Error('This club already has a Jr Club Head (Vice President). There can only be one Vice President per club.');
+        err.statusCode = 400;
+        throw err;
+      }
+    }
+    
+    // ✅ CROSS-CLUB RESTRICTION: If being added as president/VP or core, check they are not president/VP elsewhere
+    if (ELEVATED_ROLES.includes(role)) {
+      const otherLeadership = await Membership.findOne({
+        user: userId,
+        club: { $ne: clubId },
+        role: { $in: LEADERSHIP_ROLES },
+        status: 'approved'
+      });
+      
+      if (otherLeadership) {
+        const err = new Error('This user is already a President or Vice President in another club. They can only be added as a regular member in this club.');
+        err.statusCode = 400;
+        throw err;
+      }
+    }
+
     const membership = await Membership.create({
       club: clubId,
       user: userId,
@@ -544,17 +757,119 @@ class ClubService {
 
   // Update member role
   async updateMemberRole(clubId, memberId, role, userContext) {
-    const membership = await Membership.findOneAndUpdate(
-      { _id: memberId, club: clubId },
-      { role },
-      { new: true }
-    );
+    const membership = await Membership.findOne({ _id: memberId, club: clubId });
 
     if (!membership) {
       const err = new Error('Member not found');
       err.statusCode = 404;
       throw err;
     }
+
+    // ✅ ACCESS CONTROL: Check who is updating the role
+    const { User } = require('../auth/user.model');
+    const updater = await User.findById(userContext.id);
+    const updaterMembership = await Membership.findOne({ club: clubId, user: userContext.id });
+    
+    const CORE_ROLES = ['core', 'secretary', 'treasurer', 'leadPR', 'leadTech'];
+    const LEADERSHIP_ROLES = ['president', 'vicePresident'];
+    const ELEVATED_ROLES = [...CORE_ROLES, ...LEADERSHIP_ROLES];
+    
+    // ✅ LEADERSHIP PROTECTION: Only admin can change leadership members' roles
+    if (LEADERSHIP_ROLES.includes(membership.role)) {
+      if (updater.roles?.global !== 'admin') {
+        const err = new Error('Only Admin can change the role of President or Vice President. Leadership cannot edit other leadership members\' roles.');
+        err.statusCode = 403;
+        throw err;
+      }
+    }
+    
+    // ✅ LEADERSHIP ROLES: Only assigned coordinator or admin can assign president/vicePresident
+    if (LEADERSHIP_ROLES.includes(role)) {
+      const isAdmin = updater.roles?.global === 'admin';
+      const isAssignedCoordinator = updater.roles?.global === 'coordinator' && await this.isAssignedCoordinator(userContext.id, clubId);
+      
+      if (!isAdmin && !isAssignedCoordinator) {
+        const err = new Error('Only Admin or Assigned Coordinator can assign Sr Club Head (President) or Jr Club Head (Vice President) roles.');
+        err.statusCode = 403;
+        throw err;
+      }
+    }
+    
+    // ✅ CORE ROLES: Only admin or club leadership can assign (NOT coordinator, NOT core members)
+    if (CORE_ROLES.includes(role)) {
+      const isAdmin = updater.roles?.global === 'admin';
+      const isLeadership = updaterMembership && LEADERSHIP_ROLES.includes(updaterMembership.role);
+      
+      if (!isAdmin && !isLeadership) {
+        const err = new Error('Only Admin or Club Leadership (President/Vice President) can assign core team roles. Core members can only change to member role.');
+        err.statusCode = 403;
+        throw err;
+      }
+    }
+    
+    // ✅ MEMBER ROLE: Admin, leadership, or core members can assign
+    if (role === 'member') {
+      const isAdmin = updater.roles?.global === 'admin';
+      const isLeadership = updaterMembership && LEADERSHIP_ROLES.includes(updaterMembership.role);
+      const isCoreTeam = updaterMembership && CORE_ROLES.includes(updaterMembership.role);
+      
+      if (!isAdmin && !isLeadership && !isCoreTeam) {
+        const err = new Error('Only Admin, Club Leadership, or Core Team members can change to member role.');
+        err.statusCode = 403;
+        throw err;
+      }
+    }
+
+    // ✅ ONE PRESIDENT PER CLUB: Check if president already exists (excluding current member)
+    if (role === 'president') {
+      const existingPresident = await Membership.findOne({
+        club: clubId,
+        role: 'president',
+        status: 'approved',
+        _id: { $ne: memberId } // Exclude the member being updated
+      });
+      
+      if (existingPresident) {
+        const err = new Error('This club already has a Sr Club Head (President). There can only be one President per club.');
+        err.statusCode = 400;
+        throw err;
+      }
+    }
+    
+    // ✅ ONE VICE PRESIDENT PER CLUB: Check if vice president already exists (excluding current member)
+    if (role === 'vicePresident') {
+      const existingVP = await Membership.findOne({
+        club: clubId,
+        role: 'vicePresident',
+        status: 'approved',
+        _id: { $ne: memberId } // Exclude the member being updated
+      });
+      
+      if (existingVP) {
+        const err = new Error('This club already has a Jr Club Head (Vice President). There can only be one Vice President per club.');
+        err.statusCode = 400;
+        throw err;
+      }
+    }
+    
+    // ✅ CROSS-CLUB RESTRICTION: If promoting to president/VP or core, check they are not president/VP elsewhere
+    if (ELEVATED_ROLES.includes(role)) {
+      const otherLeadership = await Membership.findOne({
+        user: membership.user,
+        club: { $ne: clubId },
+        role: { $in: LEADERSHIP_ROLES },
+        status: 'approved'
+      });
+      
+      if (otherLeadership) {
+        const err = new Error('This user is already a President or Vice President in another club. They can only be a regular member in this club.');
+        err.statusCode = 400;
+        throw err;
+      }
+    }
+
+    membership.role = role;
+    await membership.save();
 
     await auditService.log({
       user: userContext.id,
@@ -570,7 +885,7 @@ class ClubService {
 
   // Remove member from club
   async removeMember(clubId, memberId, userContext) {
-    const membership = await Membership.findOneAndDelete({ _id: memberId, club: clubId });
+    const membership = await Membership.findOne({ _id: memberId, club: clubId });
 
     if (!membership) {
       const err = new Error('Member not found');
@@ -578,10 +893,57 @@ class ClubService {
       throw err;
     }
 
+    // ✅ SELF-REMOVAL PREVENTION: President/Vice President cannot remove themselves
+    const LEADERSHIP_ROLES = ['president', 'vicePresident'];
+    const { User } = require('../auth/user.model');
+    const remover = await User.findById(userContext.id);
+    
+    // Check if trying to remove self
+    const isSelfRemoval = membership.user.toString() === userContext.id.toString();
+    
+    if (isSelfRemoval && LEADERSHIP_ROLES.includes(membership.role)) {
+      // Only admin can remove president/vice president (even themselves)
+      if (remover.roles?.global !== 'admin') {
+        const err = new Error('President and Vice President cannot remove themselves from the club. Only Admin can remove leadership roles.');
+        err.statusCode = 403;
+        throw err;
+      }
+    }
+
+    const removerMembership = await Membership.findOne({ club: clubId, user: userContext.id });
+    const CORE_ROLES = ['core', 'secretary', 'treasurer', 'leadPR', 'leadTech'];
+    
+    // ✅ LEADERSHIP MEMBERS: Only admin or assigned coordinator can remove
+    if (LEADERSHIP_ROLES.includes(membership.role)) {
+      const isAdmin = remover.roles?.global === 'admin';
+      const isAssignedCoordinator = remover.roles?.global === 'coordinator' && await this.isAssignedCoordinator(userContext.id, clubId);
+      
+      if (!isAdmin && !isAssignedCoordinator) {
+        const err = new Error('Only Admin or Assigned Coordinator can remove President or Vice President. Leadership cannot remove other leadership members.');
+        err.statusCode = 403;
+        throw err;
+      }
+    }
+
+    // ✅ CORE & MEMBER ROLES: Only admin or club leadership can remove (NOT coordinator)
+    if (CORE_ROLES.includes(membership.role) || membership.role === 'member') {
+      const isAdmin = remover.roles?.global === 'admin';
+      const isLeadership = removerMembership && LEADERSHIP_ROLES.includes(removerMembership.role);
+      
+      if (!isAdmin && !isLeadership) {
+        const err = new Error('Only Admin or Club Leadership (President/Vice President) can remove core team and regular members. Coordinator can only remove Sr/Jr Club Head.');
+        err.statusCode = 403;
+        throw err;
+      }
+    }
+
+    await Membership.findByIdAndDelete(memberId);
+
     await auditService.log({
       user: userContext.id,
       action: 'MEMBER_REMOVE',
       target: `Membership:${memberId}`,
+      oldValue: { userId: membership.user, role: membership.role },
       ip: userContext.ip,
       userAgent: userContext.userAgent
     });

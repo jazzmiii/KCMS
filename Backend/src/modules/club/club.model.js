@@ -21,10 +21,15 @@ const ClubSchema = new mongoose.Schema(
     coordinator: { type: mongoose.Types.ObjectId, ref: 'User', required: true },
     status: {
       type: String,
-      enum: ['draft','pending_approval','active','archived'],
+      enum: ['draft','pending_approval','active','pending_archive','archived'],
       default: 'draft'
     },
-    pendingSettings: mongoose.Schema.Types.Mixed // holds protected field changes
+    pendingSettings: mongoose.Schema.Types.Mixed, // holds protected field changes
+    archiveRequest: {
+      requestedBy: { type: mongoose.Types.ObjectId, ref: 'User' },
+      requestedAt: Date,
+      reason: String
+    }
   },
   { timestamps: true }
 );

@@ -1,7 +1,10 @@
 /**
  * File Upload Validation Middleware
  * Validates file types, sizes, and content before upload
+ * Includes image compression for files >2MB (Workplan Line 406)
  */
+
+const { processUploadedImage, isSharpAvailable } = require('../utils/imageProcessor');
 
 const allowedTypes = {
   image: {
@@ -65,19 +68,45 @@ function validateFile(file, category = 'image') {
 }
 
 /**
- * Express middleware for file validation
+ * Express middleware for file validation and image processing
+ * Workplan Line 406: Compress images if >2MB
+ * Workplan Line 407: Generate thumbnail
  */
-function validateUpload(category = 'image') {
-  return (req, res, next) => {
+function validateUpload(category = 'image', options = {}) {
+  return async (req, res, next) => {
     try {
+      const processImages = options.processImages !== false && category === 'image';
+
       // Single file upload
       if (req.file) {
         validateFile(req.file, category);
+        
+        // Process image: compress if >2MB and generate thumbnail
+        if (processImages && isSharpAvailable()) {
+          const processingResult = await processUploadedImage(req.file, options);
+          req.file.processingInfo = processingResult;
+          
+          if (processingResult.thumbnail) {
+            req.file.thumbnailPath = processingResult.thumbnail;
+          }
+        }
       }
 
       // Multiple file uploads
       if (req.files && Array.isArray(req.files)) {
-        req.files.forEach(file => validateFile(file, category));
+        for (const file of req.files) {
+          validateFile(file, category);
+          
+          // Process each image
+          if (processImages && isSharpAvailable()) {
+            const processingResult = await processUploadedImage(file, options);
+            file.processingInfo = processingResult;
+            
+            if (processingResult.thumbnail) {
+              file.thumbnailPath = processingResult.thumbnail;
+            }
+          }
+        }
       }
 
       next();

@@ -19,6 +19,38 @@ exports.createEvent = async (req, res, next) => {
 };
 
 /**
+ * Update Event (only draft events)
+ */
+exports.updateEvent = async (req, res, next) => {
+  try {
+    const event = await svc.update(
+      req.params.id,
+      req.body,
+      req.files,
+      { id: req.user.id, ip: req.ip, userAgent: req.headers['user-agent'] }
+    );
+    successResponse(res, { event }, 'Event updated successfully');
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Delete Event (only draft events)
+ */
+exports.deleteEvent = async (req, res, next) => {
+  try {
+    const result = await svc.delete(
+      req.params.id,
+      { id: req.user.id, ip: req.ip, userAgent: req.headers['user-agent'] }
+    );
+    successResponse(res, result, 'Event deleted successfully');
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
  * List Events
  */
 exports.listEvents = async (req, res, next) => {
@@ -157,6 +189,24 @@ exports.coordinatorOverrideBudget = async (req, res, next) => {
       }
     );
     successResponse(res, { event }, 'Financial override applied');
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Upload Completion Materials
+ * Handles photos, report, attendance, bills for pending_completion events
+ */
+exports.uploadCompletionMaterials = async (req, res, next) => {
+  try {
+    const event = await svc.uploadCompletionMaterials(
+      req.params.id,
+      req.files,
+      req.body,
+      { id: req.user.id, ip: req.ip, userAgent: req.headers['user-agent'] }
+    );
+    successResponse(res, { event }, 'Materials uploaded successfully');
   } catch (err) {
     next(err);
   }

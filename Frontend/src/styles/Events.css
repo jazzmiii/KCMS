@@ -282,3 +282,59 @@
     align-items: center;
   }
 }
+
+/* Attendees List Styles */
+.attendees-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-height: 400px;
+  overflow-y: auto;
+  padding: 0.5rem 0;
+}
+
+.attendee-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background: #f9fafb;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  transition: all 0.2s ease;
+}
+
+.attendee-item:hover {
+  background: #f3f4f6;
+  border-color: #d1d5db;
+}
+
+.attendee-number {
+  font-weight: 600;
+  color: #667eea;
+  min-width: 30px;
+  font-size: 0.9rem;
+}
+
+.attendee-info {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.95rem;
+}
+
+.attendee-info strong {
+  color: #1f2937;
+}
+
+.attendee-roll {
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.attendee-dept {
+  color: #9ca3af;
+  font-size: 0.9rem;
+}

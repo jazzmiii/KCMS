@@ -4,11 +4,12 @@ import { useAuth } from '../../context/AuthContext';
 import Layout from '../../components/Layout';
 import clubService from '../../services/clubService';
 import recruitmentService from '../../services/recruitmentService';
+import { CORE_AND_LEADERSHIP } from '../../utils/roleConstants';
 import '../../styles/Forms.css';
 
 const CreateRecruitmentPage = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, clubMemberships } = useAuth();
   const [myClubs, setMyClubs] = useState([]);
   const [formData, setFormData] = useState({
     club: '',
@@ -30,14 +31,23 @@ const CreateRecruitmentPage = () => {
   const fetchMyClubs = async () => {
     try {
       const response = await clubService.listClubs();
-      // Filter clubs where user has president or core role
-      const managedClubs = response.data?.data?.clubs?.filter(club => 
-        user?.roles?.scoped?.some(cr => 
-          cr.club?.toString() === club._id?.toString() && 
-          (cr.role === 'president' || cr.role === 'core')
-        )
-      ) || [];
-      setMyClubs(managedClubs);
+      const allClubs = response.data?.clubs || [];
+      
+      // Admins and Coordinators can see ALL clubs
+      if (user?.roles?.global === 'admin' || user?.roles?.global === 'coordinator') {
+        setMyClubs(allClubs);
+      } else {
+        // Filter clubs where user has management role (president, vicePresident, or core team)
+        // Use clubMemberships from AuthContext (SINGLE SOURCE OF TRUTH)
+        const managedClubIds = (clubMemberships || [])
+          .filter(membership => CORE_AND_LEADERSHIP.includes(membership.role))
+          .map(membership => membership.club?._id?.toString() || membership.club?.toString());
+        
+        const managedClubs = allClubs.filter(club => 
+          managedClubIds.includes(club._id?.toString())
+        );
+        setMyClubs(managedClubs);
+      }
     } catch (error) {
       console.error('Error fetching clubs:', error);
     }

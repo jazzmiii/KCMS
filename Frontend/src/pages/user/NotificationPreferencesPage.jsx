@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Layout from '../../components/Layout';
 import userService from '../../services/userService';
+import pushNotificationService from '../../services/pushNotificationService';
 import '../../styles/Profile.css';
 
 const NotificationPreferencesPage = () => {
@@ -43,6 +44,66 @@ const NotificationPreferencesPage = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  // Push Notification State
+  const [pushSubscribed, setPushSubscribed] = useState(false);
+  const [pushSupported, setPushSupported] = useState(false);
+  const [pushLoading, setPushLoading] = useState(false);
+  const [pushPermission, setPushPermission] = useState('default');
+
+  useEffect(() => {
+    checkPushNotificationStatus();
+  }, []);
+
+  const checkPushNotificationStatus = async () => {
+    // Check if push notifications are supported
+    const supported = pushNotificationService.isSupported();
+    setPushSupported(supported);
+
+    if (supported) {
+      // Check current permission
+      const permission = pushNotificationService.getPermissionStatus();
+      setPushPermission(permission);
+
+      // Check subscription status
+      const status = await pushNotificationService.checkSubscription();
+      setPushSubscribed(status.subscribed);
+    }
+  };
+
+  const handlePushToggle = async () => {
+    setPushLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      if (pushSubscribed) {
+        // Unsubscribe
+        await pushNotificationService.unsubscribeFromPush();
+        setPushSubscribed(false);
+        setSuccess('Unsubscribed from push notifications');
+      } else {
+        // Subscribe
+        await pushNotificationService.subscribeToPush();
+        setPushSubscribed(true);
+        setPushPermission('granted');
+        setSuccess('Subscribed to push notifications! You\'ll now receive browser notifications.');
+        
+        // Show test notification
+        setTimeout(() => {
+          pushNotificationService.showTestNotification();
+        }, 1000);
+      }
+    } catch (err) {
+      if (err.message.includes('permission denied')) {
+        setError('Notification permission denied. Please enable notifications in your browser settings.');
+      } else {
+        setError(err.message || 'Failed to update push notification settings');
+      }
+    } finally {
+      setPushLoading(false);
+    }
+  };
 
   const notificationTypes = [
     { key: 'recruitment_open', label: 'New Recruitments', description: 'When a new recruitment opens' },
@@ -194,6 +255,54 @@ const NotificationPreferencesPage = () => {
                     </label>
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+
+          {/* Push Notifications (NEW) */}
+          <div className="profile-card">
+            <div className="preference-header">
+              <h3>🔔 Browser Push Notifications</h3>
+              {pushSupported ? (
+                <label className="switch">
+                  <input
+                    type="checkbox"
+                    checked={pushSubscribed}
+                    onChange={handlePushToggle}
+                    disabled={pushLoading}
+                  />
+                  <span className="slider"></span>
+                </label>
+              ) : (
+                <span className="text-muted" style={{ fontSize: '14px' }}>Not Supported</span>
+              )}
+            </div>
+
+            {pushSupported ? (
+              <div className="notification-info">
+                <p className="description">
+                  Get instant notifications in your browser even when the app is closed.
+                </p>
+                {pushSubscribed ? (
+                  <div className="status-badge success">
+                    ✓ Subscribed - You'll receive push notifications
+                  </div>
+                ) : (
+                  <div className="status-badge">
+                    {pushPermission === 'denied' ? (
+                      <>⚠️ Permission denied. Enable notifications in browser settings.</>
+                    ) : (
+                      <>Click the toggle to enable push notifications</>
+                    )}
+                  </div>
+                )}
+                {pushLoading && <p className="loading-text">Processing...</p>}
+              </div>
+            ) : (
+              <div className="notification-info">
+                <p className="description text-muted">
+                  Your browser doesn't support push notifications. Try using Chrome, Firefox, or Edge.
+                </p>
               </div>
             )}
           </div>

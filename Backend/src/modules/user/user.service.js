@@ -133,7 +133,7 @@ class UserService {
       .populate({
         path: 'club',
         select: 'name category logoUrl status',
-        match: { status: 'active' } // Only populate active clubs
+        match: { status: { $in: ['active', 'pending_archive'] } } // Include pending_archive - club functional until approved
       })
       .sort({ createdAt: -1 }); // Most recent first
     
@@ -150,8 +150,8 @@ class UserService {
       const { Club } = require('../club/club.model');
       const coordinatedClubs = await Club.find({ 
         coordinator: userId,
-        status: 'active' 
-      }).select('name category logoUrl');
+        status: { $in: ['active', 'pending_archive'] } // Include pending_archive
+      }).select('name category logoUrl status');
       
       // Add coordinated clubs to the list
       coordinatedClubs.forEach(club => {
@@ -169,8 +169,8 @@ class UserService {
     return clubs;
   }
 
-  // 4) Admin: list users with filters & pagination
-  async listUsers(filters, page = 1, limit = 20) {
+  // 4) List users with filters & pagination (Admin sees all, others see students only)
+  async listUsers(filters, page = 1, limit = 20, userContext = null) {
     const query = {};
     if (filters.name)       query['profile.name']    = new RegExp(filters.name, 'i');
     if (filters.rollNumber) query.rollNumber         = filters.rollNumber;
@@ -178,6 +178,11 @@ class UserService {
     if (filters.department) query['profile.department'] = filters.department;
     if (filters.role)       query['roles.global']    = filters.role;
     if (filters.status)     query.status             = filters.status;
+
+    // ✅ Non-admins can only see students (for adding to clubs)
+    if (userContext && userContext.roles?.global !== 'admin') {
+      query['roles.global'] = 'student';
+    }
 
     const skip = (page - 1) * limit;
     const [total, users] = await Promise.all([

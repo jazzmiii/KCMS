@@ -7,6 +7,7 @@ import eventService from '../../services/eventService';
 import userService from '../../services/userService';
 import recruitmentService from '../../services/recruitmentService';
 import { getClubLogoUrl, getClubLogoPlaceholder } from '../../utils/imageUtils';
+import { ROLE_DISPLAY_NAMES, LEADERSHIP_ROLES, CORE_ROLES } from '../../utils/roleConstants';
 import '../../styles/ClubDashboard.css';
 
 const ClubDashboard = () => {
@@ -30,6 +31,8 @@ const ClubDashboard = () => {
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
   const [selectedMember, setSelectedMember] = useState(null);
   const [showEditRoleModal, setShowEditRoleModal] = useState(false);
+  const [showArchiveModal, setShowArchiveModal] = useState(false);
+  const [archiveReason, setArchiveReason] = useState('');
 
   useEffect(() => {
     fetchClubDashboardData();
@@ -93,25 +96,29 @@ const ClubDashboard = () => {
         const role = membership.role;
         setUserRole(role); // Store role for display
         
-        // ✅ Define core team roles
-        const coreRoles = ['core', 'vicePresident', 'secretary', 'treasurer', 'leadPR', 'leadTech'];
-        
         // ✅ Determine management permissions based on role hierarchy
-        const isPresident = role === 'president';
-        const isCoreTeam = coreRoles.includes(role);
+        // President and Vice President have SAME permissions (leadership)
+        const isLeadership = LEADERSHIP_ROLES.includes(role);
+        const isCoreTeam = CORE_ROLES.includes(role);
         const isAdmin = user?.roles?.global === 'admin';
         
         // ✅ Coordinators can only VIEW if assigned to this club
+        // Handle both populated object and ID string
+        const coordinatorId = clubData?.coordinator?._id || clubData?.coordinator;
+        const userId = user?._id?.toString() || user?._id;
         const isAssignedCoordinator = user?.roles?.global === 'coordinator' && 
-                                       clubData?.coordinator?._id === user._id;
+                                       coordinatorId?.toString() === userId;
         
-        // ✅ President has full management rights, core team has limited rights
-        setCanManage(isPresident || isCoreTeam || isAdmin || isAssignedCoordinator);
+        // ✅ Leadership (president/vicePresident) has full management rights, core team has limited rights
+        setCanManage(isLeadership || isCoreTeam || isAdmin || isAssignedCoordinator);
       } else {
         // Check if user is admin or assigned coordinator
         const isAdmin = user?.roles?.global === 'admin';
+        // Handle both populated object and ID string
+        const coordinatorId = clubData?.coordinator?._id || clubData?.coordinator;
+        const userId = user?._id?.toString() || user?._id;
         const isAssignedCoordinator = user?.roles?.global === 'coordinator' && 
-                                       clubData?.coordinator?._id === user._id;
+                                       coordinatorId?.toString() === userId;
         setCanManage(isAdmin || isAssignedCoordinator);
       }
     } catch (error) {
@@ -155,11 +162,22 @@ const ClubDashboard = () => {
     
     try {
       await clubService.removeMember(clubId, memberId);
-      alert('Member removed successfully');
-      fetchMembers();
-      fetchClubDashboardData(); // Refresh stats
+      alert('Member removed successfully!');
+      fetchMembers(); // Refresh members list
     } catch (error) {
       alert(error.response?.data?.message || 'Failed to remove member');
+    }
+  };
+
+  const handleApproveMember = async (memberId) => {
+    if (!window.confirm('Approve this member?')) return;
+    
+    try {
+      await clubService.approveMember(clubId, memberId);
+      alert('Member approved successfully!');
+      fetchMembers(); // Refresh members list
+    } catch (error) {
+      alert(error.response?.data?.message || 'Failed to approve member');
     }
   };
 
@@ -169,17 +187,68 @@ const ClubDashboard = () => {
   };
 
   const handleArchiveClub = async () => {
-    if (!window.confirm('⚠️ Are you sure you want to archive this club? This action cannot be undone.')) {
+    if (!archiveReason.trim()) {
+      alert('Please provide a reason for archiving');
       return;
     }
     
     try {
-      await clubService.archiveClub(clubId);
-      alert('✅ Club archived successfully');
-      navigate('/clubs');
+      const response = await clubService.archiveClub(clubId, { reason: archiveReason });
+      console.log('🔍 [Archive Response]', response);
+      console.log('🔍 [Archive Club Status]', response?.data?.club?.status);
+      console.log('🔍 [Archive Request]', response?.data?.club?.archiveRequest);
+      
+      const isPending = response.data?.club?.status === 'pending_archive';
+      console.log('🔍 [Is Pending?]', isPending);
+      
+      const message = isPending 
+        ? '📧 Archive request sent to coordinator for approval' 
+        : '✅ Club archived successfully';
+      alert(message);
+      setShowArchiveModal(false);
+      setArchiveReason('');
+      if (!isPending) {
+        navigate('/clubs');
+      } else {
+        console.log('🔄 [Refreshing club data...]');
+        await fetchClubDashboardData(); // Refresh to show pending status
+        console.log('✅ [Club data refreshed]');
+      }
     } catch (error) {
-      console.error('Error archiving club:', error);
+      console.error('❌ [Archive Error]', error);
+      console.error('❌ [Error Response]', error.response?.data);
       alert(error.response?.data?.message || '❌ Failed to archive club');
+    }
+  };
+  
+  const handleApproveArchive = async (decision) => {
+    if (decision === 'approve') {
+      if (!window.confirm('Approve this archive request? The club will be archived.')) return;
+      
+      try {
+        await clubService.approveArchiveRequest(clubId, { approved: true });
+        alert('✅ Club archived successfully!');
+        navigate('/clubs');
+      } catch (error) {
+        console.error('Error approving archive:', error);
+        alert(error.response?.data?.message || '❌ Failed to approve archive request');
+      }
+    } else {
+      // Reject - need reason
+      const reason = prompt('Please provide a reason for rejecting the archive request (minimum 10 characters):');
+      if (!reason || reason.trim().length < 10) {
+        alert('Rejection reason must be at least 10 characters');
+        return;
+      }
+      
+      try {
+        await clubService.approveArchiveRequest(clubId, { approved: false, reason: reason.trim() });
+        alert('✅ Archive request rejected');
+        fetchClubDashboardData(); // Refresh to show active status
+      } catch (error) {
+        console.error('Error rejecting archive:', error);
+        alert(error.response?.data?.message || '❌ Failed to reject archive request');
+      }
     }
   };
 
@@ -238,24 +307,51 @@ const ClubDashboard = () => {
             <div className="club-info">
               <h1>{club.name}</h1>
               <p className="club-category">{club.category}</p>
+              {club.status === 'pending_archive' && (
+                <div className="alert alert-warning" style={{ marginTop: '0.5rem' }}>
+                  ⏳ Archive request pending coordinator approval
+                </div>
+              )}
               {userRole && (
                 <div className="user-roles">
-                  <span className="role-badge">{userRole}</span>
+                  <span className="role-badge">{ROLE_DISPLAY_NAMES[userRole] || userRole}</span>
                 </div>
               )}
             </div>
           </div>
           <div className="header-actions">
-            <Link to={`/clubs/${clubId}/edit`} className="btn btn-outline">
-              ⚙️ Edit Club
-            </Link>
+            {/* ✅ Edit Club button - Only for Admin or Leadership (NOT coordinators) */}
+            {(user?.roles?.global === 'admin' || LEADERSHIP_ROLES.includes(userRole)) && (
+              <Link to={`/clubs/${clubId}/edit`} className="btn btn-outline">
+                ⚙️ Edit Club
+              </Link>
+            )}
             <Link to={`/clubs/${clubId}`} className="btn btn-outline">
               👁️ View Public Page
             </Link>
-            {/* ✅ Archive button - Only for Admin or President */}
-            {(user?.roles?.global === 'admin' || userRole === 'president') && (
+            {/* ✅ Coordinator Approval Buttons for Archive Request */}
+            {user?.roles?.global === 'coordinator' && club.status === 'pending_archive' && (
+              <>
+                <button 
+                  onClick={() => handleApproveArchive('approve')} 
+                  className="btn btn-success"
+                  style={{ marginLeft: '0.5rem' }}
+                >
+                  ✅ Approve Archive
+                </button>
+                <button 
+                  onClick={() => handleApproveArchive('reject')} 
+                  className="btn btn-warning"
+                  style={{ marginLeft: '0.5rem' }}
+                >
+                  ❌ Reject Archive
+                </button>
+              </>
+            )}
+            {/* ✅ Archive button - Only for Admin or Leadership (President/Vice President), not when pending */}
+            {(user?.roles?.global === 'admin' || LEADERSHIP_ROLES.includes(userRole)) && club.status !== 'pending_archive' && (
               <button 
-                onClick={handleArchiveClub} 
+                onClick={() => setShowArchiveModal(true)} 
                 className="btn btn-danger"
                 style={{ marginLeft: '0.5rem' }}
               >
@@ -524,8 +620,8 @@ const ClubDashboard = () => {
             <div className="members-section">
               <div className="section-header">
                 <h2>Club Members ({members?.length || 0})</h2>
-                {/* ✅ Only admin and core team can add members (NOT coordinators) */}
-                {canManage && user?.roles?.global !== 'coordinator' && (
+                {/* ✅ All who can manage (admin, coordinator, leadership, core) can add members */}
+                {canManage && (
                   <button 
                     className="btn btn-primary" 
                     onClick={() => setShowAddMemberModal(true)}
@@ -573,29 +669,74 @@ const ClubDashboard = () => {
                             member.role === 'core' || ['vicePresident', 'secretary', 'treasurer', 'leadPR', 'leadTech'].includes(member.role) ? 'info' : 
                             'secondary'
                           }`}>
-                            {member.role || 'member'}
+                            {ROLE_DISPLAY_NAMES[member.role] || member.role || 'member'}
                           </span>
                           <span className={`badge badge-${member.status === 'approved' ? 'success' : 'warning'}`}>
                             {member.status || 'pending'}
                           </span>
                         </div>
                       </div>
-                      {canManage && (
-                        <div className="member-actions">
-                          <button 
-                            className="btn btn-sm btn-secondary"
-                            onClick={() => handleEditRole(member)}
-                          >
-                            Edit Role
-                          </button>
-                          <button 
-                            className="btn btn-sm btn-danger"
-                            onClick={() => handleRemoveMember(member._id)}
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      )}
+                      {canManage && (() => {
+                        const isLeadership = LEADERSHIP_ROLES.includes(userRole);
+                        const isCoreOnly = CORE_ROLES.includes(userRole);
+                        const isAdmin = user?.roles?.global === 'admin';
+                        const isCoordinator = user?.roles?.global === 'coordinator';
+                        const memberIsLeadership = LEADERSHIP_ROLES.includes(member.role);
+                        const memberIsCoreOnly = CORE_ROLES.includes(member.role);
+                        const memberIsElevated = [...CORE_ROLES, ...LEADERSHIP_ROLES].includes(member.role);
+                        const isSelf = member.user?._id === user?._id;
+                        
+                        // ✅ Access control:
+                        // - Admin can edit/remove anyone
+                        // - Coordinator can ONLY remove Leadership (to replace them, NOT edit)
+                        // - Leadership can ONLY edit/remove Core and Members (NOT other leadership)
+                        // - Core can ONLY remove Members (NO edit button - they can only add)
+                        const canEditThisMember = isAdmin || 
+                                                 (isLeadership && !memberIsLeadership);
+                        const canRemoveThisMember = isAdmin || 
+                                                   (isCoordinator && memberIsLeadership) ||
+                                                   (isLeadership && !memberIsLeadership && !isSelf) || 
+                                                   (isCoreOnly && !memberIsElevated && !isSelf);
+                        
+                        return (
+                          <div className="member-actions">
+                            {member.status === 'pending' && (
+                              <button 
+                                className="btn btn-sm btn-success"
+                                onClick={() => handleApproveMember(member._id)}
+                              >
+                                ✓ Approve
+                              </button>
+                            )}
+                            {canEditThisMember && (
+                              <button 
+                                className="btn btn-sm btn-secondary"
+                                onClick={() => handleEditRole(member)}
+                                title={
+                                  isCoordinator ? 'Coordinator can only edit Sr/Jr Club Head roles' :
+                                  memberIsLeadership && !isAdmin && !isCoordinator ? 'Only Admin or Coordinator can edit President/Vice President roles' :
+                                  isCoreOnly ? 'Core members can only change non-core members to member role' : ''
+                                }
+                              >
+                                Edit Role
+                              </button>
+                            )}
+                            {canRemoveThisMember && (
+                              <button 
+                                className="btn btn-sm btn-danger"
+                                onClick={() => handleRemoveMember(member._id)}
+                                title={
+                                  isCoordinator ? 'Coordinator can only remove Sr/Jr Club Head' :
+                                  memberIsLeadership && !isAdmin && !isCoordinator ? 'Only Admin or Coordinator can remove President/Vice President' :
+                                  isSelf ? 'Cannot remove yourself' : ''
+                                }
+                              >
+                                Remove
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                   ) : null)
                 )}
@@ -629,6 +770,7 @@ const ClubDashboard = () => {
       {showAddMemberModal && (
         <AddMemberModal
           clubId={clubId}
+          userRole={userRole}
           onClose={() => setShowAddMemberModal(false)}
           onSuccess={() => {
             fetchMembers();
@@ -643,6 +785,7 @@ const ClubDashboard = () => {
         <EditRoleModal
           clubId={clubId}
           member={selectedMember}
+          userRole={userRole}
           onClose={() => {
             setShowEditRoleModal(false);
             setSelectedMember(null);
@@ -654,14 +797,68 @@ const ClubDashboard = () => {
           }}
         />
       )}
+
+      {/* Archive Club Modal */}
+      {showArchiveModal && (
+        <div className="modal-overlay" onClick={() => setShowArchiveModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Archive Club</h2>
+              <button className="btn-close" onClick={() => setShowArchiveModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <p className="text-muted" style={{ marginBottom: '1rem' }}>
+                {user?.roles?.global === 'admin' 
+                  ? 'You are about to archive this club. This will hide it from active listings.'
+                  : 'Your archive request will be sent to the assigned coordinator for approval.'
+                }
+              </p>
+              <div className="form-group">
+                <label>Reason for Archiving *</label>
+                <textarea
+                  value={archiveReason}
+                  onChange={(e) => setArchiveReason(e.target.value)}
+                  placeholder="Please provide a reason for archiving this club (minimum 10 characters)"
+                  rows="4"
+                  className="form-control"
+                  style={{ width: '100%' }}
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button onClick={() => setShowArchiveModal(false)} className="btn btn-secondary">
+                Cancel
+              </button>
+              <button 
+                onClick={handleArchiveClub} 
+                className="btn btn-danger"
+                disabled={!archiveReason.trim() || archiveReason.length < 10}
+              >
+                {user?.roles?.global === 'admin' ? 'Archive Now' : 'Request Archive'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   );
 };
 
 // Add Member Modal Component
-const AddMemberModal = ({ clubId, onClose, onSuccess }) => {
+const AddMemberModal = ({ clubId, userRole, onClose, onSuccess }) => {
+  const { user } = useAuth();
   const [userId, setUserId] = useState('');
-  const [role, setRole] = useState('member');
+  
+  // ✅ Set default role based on user permissions
+  const isAdmin = user?.roles?.global === 'admin';
+  const isCoordinator = user?.roles?.global === 'coordinator';
+  const isLeadership = LEADERSHIP_ROLES.includes(userRole);
+  const isCoreOnly = CORE_ROLES.includes(userRole);
+  
+  // Coordinator defaults to 'president', others default to 'member'
+  const defaultRole = isCoordinator ? 'president' : 'member';
+  const [role, setRole] = useState(defaultRole);
+  
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [users, setUsers] = useState([]);
@@ -701,10 +898,12 @@ const AddMemberModal = ({ clubId, onClose, onSuccess }) => {
 
     try {
       await clubService.addMember(clubId, { userId, role });
-      alert('Member added successfully!');
+      alert('✅ Member added successfully!');
       onSuccess();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to add member');
+      const errorMsg = err.response?.data?.message || 'Failed to add member';
+      setError(errorMsg);
+      console.error('Error adding member:', err.response?.data);
     } finally {
       setLoading(false);
     }
@@ -726,16 +925,41 @@ const AddMemberModal = ({ clubId, onClose, onSuccess }) => {
            name.includes(searchLower);
   });
 
-  const roles = [
-    { value: 'member', label: 'Member' },
-    { value: 'core', label: 'Core Team' },
-    { value: 'president', label: 'President' },
-    { value: 'vicePresident', label: 'Vice President' },
-    { value: 'secretary', label: 'Secretary' },
-    { value: 'treasurer', label: 'Treasurer' },
-    { value: 'leadPR', label: 'Lead PR' },
-    { value: 'leadTech', label: 'Lead Tech' }
+  // ✅ ACCESS CONTROL: Restrict role options based on user's role
+  // (Permission variables already defined at top of component)
+  
+  const leadershipRoles = [
+    { value: 'president', label: ROLE_DISPLAY_NAMES.president },  // Sr Club Head
+    { value: 'vicePresident', label: ROLE_DISPLAY_NAMES.vicePresident }  // Jr Club Head
   ];
+  
+  const coreRoles = [
+    { value: 'core', label: ROLE_DISPLAY_NAMES.core },
+    { value: 'secretary', label: ROLE_DISPLAY_NAMES.secretary },
+    { value: 'treasurer', label: ROLE_DISPLAY_NAMES.treasurer },
+    { value: 'leadPR', label: ROLE_DISPLAY_NAMES.leadPR },
+    { value: 'leadTech', label: ROLE_DISPLAY_NAMES.leadTech }
+  ];
+  
+  const memberRole = [{ value: 'member', label: ROLE_DISPLAY_NAMES.member }];
+  
+  // Determine available roles based on user permissions
+  let roles;
+  if (isAdmin) {
+    // Admin can assign all roles
+    roles = [...memberRole, ...coreRoles, ...leadershipRoles];
+  } else if (isCoordinator) {
+    // Coordinator can ONLY assign leadership roles (President/Vice President)
+    roles = leadershipRoles;
+  } else if (isLeadership) {
+    // Leadership can ONLY add core and regular members (NOT other leadership)
+    roles = [...memberRole, ...coreRoles];
+  } else if (isCoreOnly) {
+    // Core members can only add regular members
+    roles = memberRole;
+  } else {
+    roles = memberRole;
+  }
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -805,7 +1029,15 @@ const AddMemberModal = ({ clubId, onClose, onSuccess }) => {
               ))}
             </select>
             <small className="form-hint">
-              Select the role for this member in the club
+              {isCoreOnly ? (
+                <span className="text-warning">⚠️ Core members can only add regular members.</span>
+              ) : isLeadership ? (
+                <span className="text-info">ℹ️ You can assign Core and Member roles. Coordinator handles Sr/Jr Club Head assignments.</span>
+              ) : isCoordinator ? (
+                <span className="text-info">ℹ️ Coordinator can only assign Sr Club Head and Jr Club Head roles. Leadership handles other roles.</span>
+              ) : (
+                'Select the role for this member in the club'
+              )}
             </small>
           </div>
 
@@ -828,12 +1060,39 @@ const AddMemberModal = ({ clubId, onClose, onSuccess }) => {
 };
 
 // Edit Role Modal Component
-const EditRoleModal = ({ clubId, member, onClose, onSuccess }) => {
+const EditRoleModal = ({ clubId, member, userRole, onClose, onSuccess }) => {
+  const { user } = useAuth();
   const [role, setRole] = useState(member.role);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const roles = ['member', 'core', 'president', 'vicePresident', 'secretary', 'treasurer', 'leadPR', 'leadTech'];
+  // ✅ ACCESS CONTROL: Restrict role options based on user's role
+  const isAdmin = user?.roles?.global === 'admin';
+  const isCoordinator = user?.roles?.global === 'coordinator';
+  const isLeadership = LEADERSHIP_ROLES.includes(userRole);
+  const isCoreOnly = CORE_ROLES.includes(userRole);
+  
+  const leadershipRoles = ['president', 'vicePresident'];
+  const coreRoles = ['core', 'secretary', 'treasurer', 'leadPR', 'leadTech'];
+  const memberRole = ['member'];
+  
+  // Determine available roles based on user permissions
+  let roles;
+  if (isAdmin) {
+    // Admin can assign all roles
+    roles = [...memberRole, ...coreRoles, ...leadershipRoles];
+  } else if (isCoordinator) {
+    // Coordinator can ONLY change leadership roles (President/Vice President)
+    roles = leadershipRoles;
+  } else if (isLeadership) {
+    // Leadership can ONLY change to core and member roles (NOT other leadership)
+    roles = [...memberRole, ...coreRoles];
+  } else if (isCoreOnly) {
+    // Core members can only change to member role
+    roles = memberRole;
+  } else {
+    roles = memberRole;
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -842,10 +1101,12 @@ const EditRoleModal = ({ clubId, member, onClose, onSuccess }) => {
 
     try {
       await clubService.updateMemberRole(clubId, member._id, { role });
-      alert('Role updated successfully!');
+      alert('✅ Role updated successfully!');
       onSuccess();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to update role');
+      const errorMsg = err.response?.data?.message || 'Failed to update role';
+      setError(errorMsg);
+      console.error('Error updating role:', err.response?.data);
     } finally {
       setLoading(false);
     }
@@ -880,10 +1141,21 @@ const EditRoleModal = ({ clubId, member, onClose, onSuccess }) => {
             >
               {roles.map(r => (
                 <option key={r} value={r}>
-                  {r.charAt(0).toUpperCase() + r.slice(1)}
+                  {ROLE_DISPLAY_NAMES[r] || r}
                 </option>
               ))}
             </select>
+            <small className="form-hint">
+              {isCoreOnly ? (
+                <span className="text-warning">⚠️ Core members can only change to regular member role.</span>
+              ) : isLeadership ? (
+                <span className="text-info">ℹ️ You can assign Core and Member roles. Coordinator handles Sr/Jr Club Head role changes.</span>
+              ) : isCoordinator ? (
+                <span className="text-info">ℹ️ Coordinator can only change Sr Club Head and Jr Club Head roles. Leadership handles other roles.</span>
+              ) : (
+                'Select the new role for this member'
+              )}
+            </small>
           </div>
 
           <div className="modal-actions">

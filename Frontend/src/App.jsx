@@ -2,8 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 
-// Public Pages
-import HomePage from './pages/public/HomePage';
+// Auth Pages (OLD STRUCTURE - REVERTED)
 import LoginPage from './pages/auth/LoginPage';
 import RegisterPage from './pages/auth/RegisterPage';
 import VerifyOtpPage from './pages/auth/VerifyOtpPage';
@@ -11,53 +10,50 @@ import CompleteProfilePage from './pages/auth/CompleteProfilePage';
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage';
 import ResetPasswordPage from './pages/auth/ResetPasswordPage';
 
-// Protected Pages
-import StudentDashboard from './pages/dashboards/StudentDashboard';
-import AdminDashboard from './pages/dashboards/AdminDashboard';
-import CoordinatorDashboard from './pages/dashboards/CoordinatorDashboard';
-import CoreDashboard from './pages/dashboards/CoreDashboard';
-
-// Club Pages
+// Club Pages (OLD STRUCTURE)
 import ClubsPage from './pages/clubs/ClubsPage';
 import ClubDetailPage from './pages/clubs/ClubDetailPage';
 import ClubDashboard from './pages/clubs/ClubDashboard';
 import CreateClubPage from './pages/clubs/CreateClubPage';
 import EditClubPage from './pages/clubs/EditClubPage';
 
-// Recruitment Pages
+// Event Pages (OLD STRUCTURE)
+import EventsPage from './pages/events/EventsPage';
+import EventDetailPage from './pages/events/EventDetailPage';
+import CreateEventPage from './pages/events/CreateEventPage';
+import EditEventPage from './pages/events/EditEventPage';
+
+// Recruitment Pages (OLD STRUCTURE)
 import RecruitmentsPage from './pages/recruitments/RecruitmentsPage';
 import RecruitmentDetailPage from './pages/recruitments/RecruitmentDetailPage';
 import CreateRecruitmentPage from './pages/recruitments/CreateRecruitmentPage';
 import ApplicationsPage from './pages/recruitments/ApplicationsPage';
 
-// Event Pages
-import EventsPage from './pages/events/EventsPage';
-import EventDetailPage from './pages/events/EventDetailPage';
-import CreateEventPage from './pages/events/CreateEventPage';
-
-// User Pages
+// User Pages (OLD STRUCTURE)
 import ProfilePage from './pages/user/ProfilePage';
 import UsersManagementPage from './pages/user/UsersManagementPage';
 import SessionsPage from './pages/user/SessionsPage';
 import NotificationPreferencesPage from './pages/user/NotificationPreferencesPage';
 
-// Notification Pages
-import NotificationsPage from './pages/notifications/NotificationsPage';
-
-// Admin Pages
+// Admin Pages (OLD STRUCTURE)
 import MaintenanceModePage from './pages/admin/MaintenanceModePage';
 import SystemSettings from './pages/admin/SystemSettings';
 import AuditLogs from './pages/admin/AuditLogs';
 import ArchivedClubsPage from './pages/admin/ArchivedClubsPage';
 
-// Reports Pages
+// Dashboard Pages (OLD STRUCTURE)
+import HomePage from './pages/public/HomePage';
+import StudentDashboard from './pages/dashboards/StudentDashboard';
+import AdminDashboard from './pages/dashboards/AdminDashboard';
+import CoordinatorDashboard from './pages/dashboards/CoordinatorDashboard';
+
+// Other Pages (OLD STRUCTURE)
+import NotificationsPage from './pages/notifications/NotificationsPage';
+import EmailUnsubscribePage from './pages/notifications/EmailUnsubscribePage';
 import ReportsPage from './pages/reports/ReportsPage';
-
-// Media Pages
 import GalleryPage from './pages/media/GalleryPage';
-
-// Search Pages
 import SearchPage from './pages/search/SearchPage';
+import CreateNotificationPage from './pages/admin/CreateNotificationPage';
 
 // Components
 import ProtectedRoute from './components/ProtectedRoute';
@@ -102,14 +98,9 @@ function App() {
               </ProtectedRoute>
             }
           />
-          <Route
-            path="/core/dashboard"
-            element={
-              <ProtectedRoute>
-                <CoreDashboard />
-              </ProtectedRoute>
-            }
-          />
+          {/* /core/dashboard route removed - club roles are not global roles */}
+          {/* Users with club roles (president, core, etc.) should use StudentDashboard */}
+          {/* StudentDashboard will show "My Clubs" section with their clubMemberships */}
 
           {/* Club Routes */}
           <Route
@@ -209,6 +200,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <CreateEventPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/events/:id/edit"
+            element={
+              <ProtectedRoute>
+                <EditEventPage />
               </ProtectedRoute>
             }
           />
@@ -315,6 +314,19 @@ function App() {
             element={
               <ProtectedRoute>
                 <SearchPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Email Unsubscribe (Public - uses token authentication) */}
+          <Route path="/unsubscribe/:token" element={<EmailUnsubscribePage />} />
+
+          {/* Admin: Create Notification */}
+          <Route
+            path="/admin/notifications/create"
+            element={
+              <ProtectedRoute requiredRole="admin">
+                <CreateNotificationPage />
               </ProtectedRoute>
             }
           />

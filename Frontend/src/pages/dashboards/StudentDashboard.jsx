@@ -7,10 +7,13 @@ import eventService from '../../services/eventService';
 import recruitmentService from '../../services/recruitmentService';
 import userService from '../../services/userService';
 import { getClubLogoUrl, getClubLogoPlaceholder } from '../../utils/imageUtils';
+import { ROLE_DISPLAY_NAMES, LEADERSHIP_ROLES } from '../../utils/roleConstants';
 import '../../styles/Dashboard.css';
 
 const StudentDashboard = () => {
   const { user } = useAuth();
+  const [clubMemberships, setClubMemberships] = useState([]);
+  const [membershipLoading, setMembershipLoading] = useState(true);
   const [stats, setStats] = useState({
     myClubsCount: 0,
     activeClubs: 0,
@@ -32,14 +35,15 @@ const StudentDashboard = () => {
       // Add timestamp to bypass stale cache
       const timestamp = Date.now();
       const [myClubsRes, allClubsRes, eventsRes, recruitmentsRes] = await Promise.all([
-        userService.getMyClubs(), // Get student's clubs (where they are member/core/president)
+        userService.getMyClubs(), // Get student's clubs
         clubService.listClubs({ limit: 8, status: 'active', _t: timestamp }), // Get all active clubs
         eventService.list({ limit: 10, status: 'published', upcoming: true }), // ✅ Only future events
         recruitmentService.list({ limit: 5, status: 'open' }),
       ]);
 
-      // Backend: successResponse(res, { clubs }) → { data: { clubs: [{ club, role }] } }
+      // Get club memberships
       const studentClubs = myClubsRes.data?.clubs || [];
+      setClubMemberships(studentClubs);
       setMyClubsList(studentClubs);
       
       // Backend: successResponse(res, { total, clubs }) → { data: { total, clubs } }
@@ -62,6 +66,7 @@ const StudentDashboard = () => {
       console.error('Error fetching dashboard data:', error);
     } finally {
       setLoading(false);
+      setMembershipLoading(false);
     }
   };
 
@@ -228,11 +233,11 @@ const StudentDashboard = () => {
                     <h3>{membership.club.name}</h3>
                     <span className="club-category">{membership.club.category}</span>
                     <span className={`badge ${
-                      membership.role === 'president' ? 'badge-danger' : 
-                      membership.role === 'core' || membership.role.includes('lead') ? 'badge-warning' : 
+                      membership.role === 'president' || membership.role === 'vicePresident' ? 'badge-danger' : 
+                      membership.role === 'core' || membership.role.includes('lead') || membership.role === 'secretary' || membership.role === 'treasurer' ? 'badge-warning' : 
                       'badge-info'
-                    }`} style={{ marginTop: '4px', textTransform: 'capitalize' }}>
-                      {membership.role}
+                    }`} style={{ marginTop: '4px' }}>
+                      {ROLE_DISPLAY_NAMES[membership.role] || membership.role}
                     </span>
                   </div>
                   {/* ✅ Smart routing: members see detail page, core team sees dashboard */}

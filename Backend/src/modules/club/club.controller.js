@@ -85,14 +85,38 @@ exports.approveClub = async (req, res, next) => {
   }
 };
 
-// Archive Club
+// Archive Club (Leadership requests, Admin archives directly)
 exports.archiveClub = async (req, res, next) => {
   try {
     const club = await clubService.archiveClub(
       req.params.clubId,
+      req.body.reason,
       { id: req.user.id, ip: req.ip, userAgent: req.headers['user-agent'] }
     );
-    successResponse(res, { club }, 'Club archived');
+    const message = club.status === 'archived' 
+      ? 'Club archived successfully' 
+      : 'Archive request sent to coordinator for approval';
+    successResponse(res, { club }, message);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Approve/Reject Archive Request (Coordinator only)
+exports.approveArchiveRequest = async (req, res, next) => {
+  try {
+    // Convert boolean 'approved' to string 'approve'/'reject' for service
+    const decision = req.body.approved ? 'approve' : 'reject';
+    
+    const club = await clubService.approveArchiveRequest(
+      req.params.clubId,
+      decision,
+      { id: req.user.id, ip: req.ip, userAgent: req.headers['user-agent'] }
+    );
+    const message = req.body.approved
+      ? 'Club archived successfully' 
+      : 'Archive request rejected';
+    successResponse(res, { club }, message);
   } catch (err) {
     next(err);
   }

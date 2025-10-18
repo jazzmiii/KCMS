@@ -5,8 +5,9 @@ const {
   permit, 
   requireEither, 
   requireAssignedCoordinatorOrClubRoleForEvent,
-  CORE_AND_PRESIDENT,  // ✅ All core roles + president
-  PRESIDENT_ONLY       // ✅ President only
+  CORE_AND_PRESIDENT,  // ✅ All core roles + leadership
+  LEADERSHIP_ROLES,    // ✅ President + Vice President (same permissions)
+  PRESIDENT_ONLY       // ✅ President only (deprecated)
 } = require('../../middlewares/permission');
 const validate     = require('../../middlewares/validate');
 const parseFormData = require('../../middlewares/parseFormData');
@@ -44,6 +45,31 @@ router.get(
   '/:id',
   validate(v.eventId, 'params'),
   ctrl.getEvent
+);
+
+// Update Event (Core+ can update draft events - Section 5.1)
+router.patch(
+  '/:id',
+  authenticate,
+  upload.fields([
+    { name: 'proposal', maxCount: 1 },
+    { name: 'budgetBreakdown', maxCount: 1 },
+    { name: 'venuePermission', maxCount: 1 }
+  ]),
+  parseFormData,
+  requireAssignedCoordinatorOrClubRoleForEvent(CORE_AND_PRESIDENT), // ✅ Check permissions based on event's club, not request body
+  validate(v.eventId, 'params'),
+  validate(v.updateEvent),
+  ctrl.updateEvent
+);
+
+// Delete Event (Core+ can delete draft events - Section 5.1)
+router.delete(
+  '/:id',
+  authenticate,
+  requireAssignedCoordinatorOrClubRoleForEvent(CORE_AND_PRESIDENT), // ✅ Check permissions based on event's club
+  validate(v.eventId, 'params'),
+  ctrl.deleteEvent
 );
 
 // Change Status (Core+ OR Assigned Coordinator can change status - Section 5.1)
@@ -93,11 +119,11 @@ router.get(
   ctrl.listBudgets
 );
 
-// Settle Budget (President can settle budget - Section 5.3)
+// Settle Budget (Leadership can settle budget - Section 5.3)
 router.post(
   '/:id/budget/settle',
   authenticate,
-  requireEither(['admin'], PRESIDENT_ONLY), // ✅ Admin OR President ONLY
+  requireEither(['admin'], LEADERSHIP_ROLES), // ✅ Admin OR Leadership (President/Vice President)
   validate(v.eventId, 'params'),
   validate(v.settleBudget),
   ctrl.settleBudget
@@ -111,6 +137,21 @@ router.post(
   validate(v.eventId, 'params'),
   validate(v.financialOverride),
   ctrl.coordinatorOverrideBudget
+);
+
+// Upload Completion Materials (Photos, Report, Attendance, Bills)
+router.post(
+  '/:id/upload-materials',
+  authenticate,
+  upload.fields([
+    { name: 'photos', maxCount: 10 },
+    { name: 'report', maxCount: 1 },
+    { name: 'attendance', maxCount: 1 },
+    { name: 'bills', maxCount: 10 }
+  ]),
+  requireAssignedCoordinatorOrClubRoleForEvent(CORE_AND_PRESIDENT), // ✅ Event creators can upload
+  validate(v.eventId, 'params'),
+  ctrl.uploadCompletionMaterials
 );
 
 module.exports = router;

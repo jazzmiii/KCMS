@@ -1,5 +1,6 @@
 // src/modules/search/search.controller.js
 const searchService = require('./search.service');
+const recommendationService = require('./recommendation.service');
 const { successResponse, paginatedResponse } = require('../../utils/response');
 
 /**
@@ -28,11 +29,12 @@ exports.advancedSearch = async (req, res, next) => {
 
 /**
  * Get club recommendations for a user
+ * Workplan Lines 523-535: Department-based, similar clubs, trending, friends' clubs
  */
 exports.recommendClubs = async (req, res, next) => {
   try {
-    const recommendations = await searchService.recommendClubs(req.user);
-    successResponse(res, { recommendations }, 'Club recommendations retrieved');
+    const recommendations = await recommendationService.getClubRecommendations(req.user.id);
+    successResponse(res, recommendations, 'Club recommendations retrieved');
   } catch (err) {
     next(err);
   }
@@ -40,10 +42,11 @@ exports.recommendClubs = async (req, res, next) => {
 
 /**
  * Get user recommendations for a club
+ * For clubs to identify potential members
  */
 exports.recommendUsers = async (req, res, next) => {
   try {
-    const recommendations = await searchService.recommendUsers(req.params.clubId);
+    const recommendations = await recommendationService.getPotentialMembers(req.params.clubId);
     successResponse(res, { recommendations }, 'User recommendations retrieved');
   } catch (err) {
     next(err);

@@ -9,8 +9,9 @@ const {
   requireAssignedCoordinator,
   requireAdminOrCoordinatorOrClubRole,
   requirePresident,
-  CORE_AND_PRESIDENT,  // All core roles + president
-  PRESIDENT_ONLY       // President only
+  CORE_AND_PRESIDENT,  // All core roles + leadership
+  LEADERSHIP_ROLES,    // President + Vice President (same permissions)
+  PRESIDENT_ONLY       // President only (deprecated)
 } = require('../../middlewares/permission');
 const validate     = require('../../middlewares/validate');
 const { validateUpload } = require('../../middlewares/fileValidator');
@@ -45,11 +46,11 @@ router.get(
   ctrl.getClub
 );
 
-// Update Settings (President ONLY can edit, Coordinator approval for protected - Section 3.3)
+// Update Settings (Leadership can edit, Coordinator approval for protected - Section 3.3)
 router.patch(
   '/:clubId/settings',
   authenticate,
-  requirePresident(), // ✅ Admin OR ONLY Club President (not other core members)
+  requireEither(['admin'], LEADERSHIP_ROLES), // ✅ Admin OR Leadership (President/Vice President)
   validate(v.clubId, 'params'),
   validate(v.updateSettings),
   ctrl.updateSettings
@@ -77,13 +78,25 @@ router.post(
 // NOTE: Club approval route removed - Admin creates clubs directly as 'active'
 // Only settings changes require coordinator approval (see /settings/approve and /settings/reject above)
 
-// Archive Club (Admin OR Club President ONLY - Section 3.3)
+// Archive Club (Admin OR Leadership - Section 3.3)
+// Leadership requests archive → coordinator approves, Admin archives directly
 router.delete(
   '/:clubId',
   authenticate,
-  requirePresident(), // Admin OR ONLY Club President
+  requireEither(['admin'], LEADERSHIP_ROLES), // Admin OR Leadership (President/Vice President)
   validate(v.clubId, 'params'),
+  validate(v.archiveClubSchema, 'body'),
   ctrl.archiveClub
+);
+
+// Approve/Reject Archive Request (Coordinator only)
+router.post(
+  '/:clubId/archive/approve',
+  authenticate,
+  requireAssignedCoordinator(),
+  validate(v.clubId, 'params'),
+  validate(v.approveArchiveSchema, 'body'),
+  ctrl.approveArchiveRequest
 );
 
 // Restore Archived Club (Admin only)
@@ -99,37 +112,37 @@ router.post(
 router.get(
   '/:clubId/members',
   authenticate,
-  requireAdminOrCoordinatorOrClubRole(['member', 'core', 'president']), // Admin OR Assigned Coordinator OR Club Members
+  requireAdminOrCoordinatorOrClubRole(['member', ...CORE_AND_PRESIDENT]), // Admin OR Assigned Coordinator OR All Club Members (member + all core + leadership)
   validate(v.clubId, 'params'),
   validate(v.getMembersSchema, 'query'),
   ctrl.getMembers
 );
 
-// Add member to club (Core+ can add members - Section 2.2)
+// Add member to club (Admin, Coordinator, Core+ can add members - Section 2.2)
 router.post(
   '/:clubId/members',
   authenticate,
-  requireEither(['admin'], CORE_AND_PRESIDENT), // ✅ Admin OR Core+President
+  requireAdminOrCoordinatorOrClubRole(CORE_AND_PRESIDENT), // ✅ Admin OR Assigned Coordinator OR Core+Leadership (service enforces role restrictions)
   validate(v.clubId, 'params'),
   validate(v.addMemberSchema),
   ctrl.addMember
 );
 
-// Update member role (President ONLY can assign roles - Section 2.2)
+// Update member role (Admin, Coordinator, Leadership can assign roles - Section 2.2)
 router.patch(
   '/:clubId/members/:memberId',
   authenticate,
-  requirePresident(), // ✅ Admin OR ONLY Club President
+  requireAdminOrCoordinatorOrClubRole(CORE_AND_PRESIDENT), // ✅ Admin OR Assigned Coordinator OR Core+Leadership (service enforces role restrictions)
   validate(v.clubIdAndMemberId, 'params'),
   validate(v.updateMemberRoleSchema),
   ctrl.updateMemberRole
 );
 
-// Remove member from club (President ONLY can remove members - Section 2.2)
+// Remove member from club (Admin, Coordinator, Leadership can remove - Section 2.2)
 router.delete(
   '/:clubId/members/:memberId',
   authenticate,
-  requirePresident(), // ✅ Admin OR ONLY Club President
+  requireAdminOrCoordinatorOrClubRole(CORE_AND_PRESIDENT), // ✅ Admin OR Assigned Coordinator OR Core+Leadership (service enforces role restrictions)
   validate(v.clubIdAndMemberId, 'params'),
   ctrl.removeMember
 );
@@ -138,17 +151,17 @@ router.delete(
 router.get(
   '/:clubId/analytics',
   authenticate,
-  requireAdminOrCoordinatorOrClubRole(['core', 'president']), // Admin OR Assigned Coordinator OR Club Core+
+  requireAdminOrCoordinatorOrClubRole(['core', 'president', 'vicePresident', 'secretary', 'treasurer', 'leadPR', 'leadTech']), // Admin OR Assigned Coordinator OR All core team
   validate(v.clubId, 'params'),
   validate(v.analyticsSchema, 'query'),
   ctrl.getAnalytics
 );
 
-// Upload club banner (President ONLY can upload banner - Section 3.3)
+// Upload club banner (Leadership can upload banner - Section 3.3)
 router.post(
   '/:clubId/banner',
   authenticate,
-  requirePresident(), // ✅ Admin OR ONLY Club President
+  requireEither(['admin'], LEADERSHIP_ROLES), // ✅ Admin OR Leadership (President/Vice President)
   validate(v.clubId, 'params'),
   upload.single('banner'),
   validateUpload('image'), // Validate file type, size, and security

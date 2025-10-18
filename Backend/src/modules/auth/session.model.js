@@ -8,6 +8,19 @@ const SessionSchema = new Schema({
   bcryptHash: { type: String, required: true },
   ip:         String,
   userAgent:  String,
+  // Device fingerprinting for security (Workplan: device fingerprinting)
+  deviceFingerprint: { type: String, index: true }, // Hash of device characteristics
+  deviceInfo: {
+    browser: String,      // Chrome, Firefox, Safari, etc.
+    browserVersion: String,
+    os: String,          // Windows, macOS, Linux, Android, iOS
+    osVersion: String,
+    deviceType: String,  // desktop, mobile, tablet
+    deviceName: String   // User-friendly device identifier
+  },
+  isNewDevice: { type: Boolean, default: false }, // Track if this was a new device login
+  rememberDevice: { type: Boolean, default: false }, // 30-day remember device flag
+  rememberDeviceExpiresAt: Date, // Expiry for remember device feature
   expiresAt:  { type: Date, required: true },
   revokedAt:  Date
 }, { timestamps: true });

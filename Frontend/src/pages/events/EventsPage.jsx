@@ -28,6 +28,10 @@ const EventsPage = () => {
         params.status = 'ongoing';
       } else if (filter === 'completed') {
         params.status = 'completed';
+      } else if (filter === 'pending_completion') {
+        params.status = 'pending_completion';
+      } else if (filter === 'incomplete') {
+        params.status = 'incomplete';
       } else if (filter === 'draft' || filter === 'pending_coordinator' || filter === 'pending_admin') {
         params.status = filter;
       }
@@ -45,10 +49,17 @@ const EventsPage = () => {
 
   const getStatusBadgeClass = (status) => {
     switch (status) {
+      case 'draft': return 'badge-secondary';
+      case 'pending': return 'badge-warning';
+      case 'pending_coordinator': return 'badge-warning';
+      case 'pending_admin': return 'badge-warning';
+      case 'approved': return 'badge-info';
       case 'published': return 'badge-success';
       case 'ongoing': return 'badge-info';
-      case 'completed': return 'badge-secondary';
-      case 'pending_coordinator': return 'badge-warning';
+      case 'pending_completion': return 'badge-warning';
+      case 'completed': return 'badge-success';
+      case 'cancelled': return 'badge-danger';
+      case 'incomplete': return 'badge-danger';
       default: return 'badge-info';
     }
   };
@@ -90,6 +101,52 @@ const EventsPage = () => {
             >
                Completed
             </button>
+            
+            {/* Role-based filters */}
+            {user && (
+              <button
+                className={`filter-btn ${filter === 'draft' ? 'active' : ''}`}
+                onClick={() => setFilter('draft')}
+              >
+                📝 My Drafts
+              </button>
+            )}
+            
+            {user?.roles?.global === 'coordinator' && (
+              <button
+                className={`filter-btn ${filter === 'pending_coordinator' ? 'active' : ''}`}
+                onClick={() => setFilter('pending_coordinator')}
+              >
+                ⏳ Pending Approval
+              </button>
+            )}
+            
+            {user?.roles?.global === 'admin' && (
+              <button
+                className={`filter-btn ${filter === 'pending_admin' ? 'active' : ''}`}
+                onClick={() => setFilter('pending_admin')}
+              >
+                🔍 Admin Review
+              </button>
+            )}
+            
+            {/* Event Creator filters - Show for any logged-in user */}
+            {user && (
+              <>
+                <button
+                  className={`filter-btn ${filter === 'pending_completion' ? 'active' : ''}`}
+                  onClick={() => setFilter('pending_completion')}
+                >
+                  ⏳ Pending Completion
+                </button>
+                <button
+                  className={`filter-btn ${filter === 'incomplete' ? 'active' : ''}`}
+                  onClick={() => setFilter('incomplete')}
+                >
+                  ❌ Incomplete
+                </button>
+              </>
+            )}
           </div>
         </div>
 

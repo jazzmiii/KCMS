@@ -207,7 +207,7 @@ const CreateClubPage = () => {
             </div>
 
             <div className="form-group">
-              <label htmlFor="president">Club President *</label>
+              <label htmlFor="president">Sr Club Head *</label>
               <select
                 id="president"
                 name="president"
@@ -217,7 +217,7 @@ const CreateClubPage = () => {
                 disabled={loadingUsers}
               >
                 <option value="">
-                  {loadingUsers ? 'Loading students...' : '-- Select Club President --'}
+                  {loadingUsers ? 'Loading students...' : '-- Select Sr Club Head --'}
                 </option>
                 {students.map((student) => (
                   <option key={student._id} value={student._id}>

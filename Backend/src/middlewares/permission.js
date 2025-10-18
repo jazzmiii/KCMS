@@ -6,18 +6,24 @@ function normalizeRole(r) {
 }
 
 /**
+ * Leadership roles (president and vicePresident have SAME permissions)
+ * ⚠️ IMPORTANT: President and Vice President have identical permissions
+ */
+const LEADERSHIP_ROLES = ['president', 'vicePresident'];
+
+/**
  * Core team roles (all positions that are considered "core" level)
  * These roles have elevated permissions compared to regular members
  */
-const CORE_ROLES = ['core', 'vicePresident', 'secretary', 'treasurer', 'leadPR', 'leadTech'];
+const CORE_ROLES = ['core', 'secretary', 'treasurer', 'leadPR', 'leadTech'];
 
 /**
- * All management roles (core team + president)
+ * All management roles (core team + leadership)
  */
-const CORE_AND_PRESIDENT = [...CORE_ROLES, 'president'];
+const CORE_AND_PRESIDENT = [...CORE_ROLES, ...LEADERSHIP_ROLES];
 
 /**
- * Check if a role is a core team role (including president)
+ * Check if a role is a core team role (including leadership)
  */
 function isCoreRole(role) {
   return CORE_AND_PRESIDENT.includes(role);
@@ -30,10 +36,18 @@ function isPresidentOnly(role) {
   return role === 'president';
 }
 
+/**
+ * Check if a role is leadership (president or vicePresident)
+ */
+function isLeadership(role) {
+  return LEADERSHIP_ROLES.includes(role);
+}
+
 // ✅ Export these constants for use in routes
 module.exports.CORE_ROLES = CORE_ROLES;
+module.exports.LEADERSHIP_ROLES = LEADERSHIP_ROLES;
 module.exports.CORE_AND_PRESIDENT = CORE_AND_PRESIDENT;
-module.exports.PRESIDENT_ONLY = ['president'];
+module.exports.PRESIDENT_ONLY = ['president']; // Deprecated - use LEADERSHIP_ROLES instead
 
 /**
  * Check if user has required global role

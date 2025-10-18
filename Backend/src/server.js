@@ -58,6 +58,16 @@ async function start() {
     }
   }
 
+  // Start event status cron jobs (auto-status transitions)
+  if (config.START_SCHEDULERS) {
+    try {
+      require('./jobs/eventStatusCron');
+      console.log('📅 Event Status Cron Jobs: Running');
+    } catch (e) {
+      console.error('Failed to start event status cron jobs:', e);
+    }
+  }
+
   // Verify SMTP (optional hard fail)
   if (config.SMTP_HOST) {
     try {

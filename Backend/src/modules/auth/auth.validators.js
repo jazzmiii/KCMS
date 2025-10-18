@@ -9,7 +9,17 @@ module.exports = {
     password:   Joi.string().min(8)
                     .pattern(/[A-Z]/).pattern(/[a-z]/)
                     .pattern(/\d/).pattern(/[^A-Za-z0-9]/)
-                    .pattern(passwordPattern).required(),
+                    .pattern(passwordPattern)
+                    .custom((value, helpers) => {
+                      // Workplan Line 18: Password cannot contain rollNumber
+                      const rollNumber = helpers.state.ancestors[0].rollNumber;
+                      if (rollNumber && value.toLowerCase().includes(rollNumber.toLowerCase())) {
+                        return helpers.error('any.invalid');
+                      }
+                      return value;
+                    })
+                    .required()
+                    .messages({'any.invalid': 'Password cannot contain your roll number'}),
     confirmPassword: Joi.any().valid(Joi.ref('password')).required()
                           .messages({'any.only':'Passwords must match'})
   }),
@@ -32,7 +42,8 @@ module.exports = {
 
   login: Joi.object({
     identifier: Joi.string().required(), // email or rollNumber
-    password: Joi.string().required()
+    password: Joi.string().required(),
+    rememberDevice: Joi.boolean().optional().default(false) // 30-day remember device feature
   }),
 
   refresh: Joi.object({

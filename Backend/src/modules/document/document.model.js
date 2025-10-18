@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const DocumentSchema = new mongoose.Schema(
   {
     club: { type: mongoose.Types.ObjectId, ref: 'Club', required: true },
+    event: { type: mongoose.Types.ObjectId, ref: 'Event' }, // Link photos/documents to specific events
     album: { type: String, default: 'default' },
     type: {
       type: String,

@@ -4,13 +4,14 @@ import { useAuth } from '../../context/AuthContext';
 import Layout from '../../components/Layout';
 import clubService from '../../services/clubService';
 import eventService from '../../services/eventService';
+import { CORE_AND_LEADERSHIP } from '../../utils/roleConstants';
 import '../../styles/Forms.css';
 
 const CreateEventPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const clubIdFromUrl = searchParams.get('clubId'); // ✅ Read clubId from URL
-  const { user } = useAuth();
+  const { user, clubMemberships } = useAuth();
   const [myClubs, setMyClubs] = useState([]);
   const [clubsLoading, setClubsLoading] = useState(true); // ✅ Track loading state
   const [formData, setFormData] = useState({
@@ -52,15 +53,14 @@ const CreateEventPage = () => {
       if (user?.roles?.global === 'admin' || user?.roles?.global === 'coordinator') {
         setMyClubs(allClubs);
       } else {
-        // ✅ Students see only clubs where they have president/core/member role
+        // ✅ Students see only clubs where they have management role (president, vicePresident, or core team)
+        // Use clubMemberships from AuthContext (SINGLE SOURCE OF TRUTH)
+        const managedClubIds = (clubMemberships || [])
+          .filter(membership => CORE_AND_LEADERSHIP.includes(membership.role))
+          .map(membership => membership.club?._id?.toString() || membership.club?.toString());
+        
         const managedClubs = allClubs.filter(club => 
-          user?.roles?.scoped?.some(cr => 
-            cr.club?.toString() === club._id?.toString() && 
-            // ✅ Allow president, core members, AND regular members to create events
-            (cr.role === 'president' || cr.role === 'core' || cr.role === 'member' || 
-             cr.role === 'vicePresident' || cr.role === 'secretary' || cr.role === 'treasurer' ||
-             cr.role === 'leadPR' || cr.role === 'leadTech')
-          )
+          managedClubIds.includes(club._id?.toString())
         );
         setMyClubs(managedClubs);
       }

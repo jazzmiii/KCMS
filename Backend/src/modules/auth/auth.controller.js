@@ -1,6 +1,7 @@
 // src/modules/auth/auth.controller.js
 const authSvc          = require('./auth.service');
 const { successResponse } = require('../../utils/response');
+const jwtUtil          = require('../../utils/jwt');
 
 exports.register = async (req, res, next) => {
   try {
@@ -126,6 +127,20 @@ exports.resetPassword = async (req, res, next) => {
       userAgent: req.headers['user-agent']
     });
     successResponse(res, null, 'Your password has been reset successfully.');
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Get JWT configuration info
+ * Workplan Line 622: JWT RS256 support
+ * Useful for debugging and monitoring JWT migration
+ */
+exports.getJwtInfo = async (req, res, next) => {
+  try {
+    const info = jwtUtil.getInfo();
+    successResponse(res, info, 'JWT configuration retrieved');
   } catch (err) {
     next(err);
   }

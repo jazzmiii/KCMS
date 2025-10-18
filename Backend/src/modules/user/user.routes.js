@@ -1,7 +1,7 @@
 // src/modules/user/user.routes.js
 const router = require('express').Router();
 const authenticate = require('../../middlewares/auth');
-const { permit }   = require('../../middlewares/permission');
+const { permit, CORE_AND_PRESIDENT }   = require('../../middlewares/permission');
 const validate     = require('../../middlewares/validate');
 const { validateUpload } = require('../../middlewares/fileValidator');
 const v            = require('./user.validators');
@@ -72,11 +72,11 @@ router.get(
   ctrl.getMyClubs
 );
 
-// ADMIN-only
+// List Users (Admin can see all, Core+ can see students only for adding to clubs)
 router.get(
   '/',
   authenticate,
-  permit({ global: ['admin'] }),
+  // All authenticated users can list, service filters: admin sees all, others see only students
   validate(v.listUsersSchema, 'query'),
   ctrl.listUsers
 );

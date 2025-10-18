@@ -10,6 +10,7 @@
     "worker:cleanup": "node src/workers/cleanup.worker.js",
     "worker:backup": "node src/workers/backup.worker.js",
     "worker:event-report": "node src/workers/event-report.worker.js",
+    "worker:event-completion": "node src/workers/event-completion.worker.js",
     "seed": "node scripts/seed.js",
     "seed:demo": "node scripts/seed-demo.js",
     "backup": "node scripts/backup.js",
@@ -17,6 +18,7 @@
     "backup:weekly": "node -e \"require('./src/workers/backup.worker').performBackup('weekly')\"",
     "backup:monthly": "node -e \"require('./src/workers/backup.worker').performBackup('monthly')\"",
     "generate:keys": "node scripts/generate-keys.js",
+    "generate:rsa-keys": "node scripts/generate-rsa-keys.js",
     "db:indexes": "node scripts/create-indexes.js",
     "lint": "eslint .",
     "test": "jest --coverage"
@@ -44,7 +46,9 @@
     "nodemailer": "^6.9.1",
     "pdfkit": "^0.13.0",
     "qrcode": "^1.5.3",
+    "sharp": "^0.34.4",
     "uuid": "^9.0.1",
+    "web-push": "^3.6.7",
     "winston": "^3.8.2"
   },
   "devDependencies": {

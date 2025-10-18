@@ -20,6 +20,20 @@ module.exports = {
     guestSpeakers: Joi.array().items(Joi.string()).optional()
   }),
 
+  updateEvent: Joi.object({
+    title: Joi.string().max(100).optional(),
+    description: Joi.string().max(1000).optional(),
+    objectives: Joi.string().max(500).optional(),
+    dateTime: Joi.date().optional(),
+    duration: Joi.number().min(0).optional(),
+    venue: Joi.string().max(200).optional(),
+    capacity: Joi.number().min(0).optional(),
+    expectedAttendees: Joi.number().min(0).optional(),
+    isPublic: Joi.boolean().optional(),
+    budget: Joi.number().min(0).optional(),
+    guestSpeakers: Joi.array().items(Joi.string()).optional()
+  }),
+
   list: Joi.object({
     club: objectId.optional(),
     status: Joi.string().valid('draft','pending_coordinator','pending_admin','published','ongoing','completed','archived').optional(),

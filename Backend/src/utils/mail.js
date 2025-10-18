@@ -73,11 +73,68 @@ async function sendBulkTemplatedEmail(templateName, recipients, options = {}) {
   return Promise.all(promises);
 }
 
+/**
+ * Add unsubscribe link to email HTML
+ * Workplan Line 368: Unsubscribe link (except URGENT)
+ * @param {string} html - Original HTML content
+ * @param {string} unsubscribeToken - Token for unsubscribe link
+ * @param {string} notificationType - Type of notification
+ * @returns {string} HTML with unsubscribe link
+ */
+function addUnsubscribeLink(html, unsubscribeToken, notificationType) {
+  const unsubscribeUrl = `${config.FRONTEND_URL}/unsubscribe/${unsubscribeToken}?type=${notificationType}`;
+  
+  const unsubscribeFooter = `
+    <hr style="margin-top: 30px; border: none; border-top: 1px solid #e0e0e0;">
+    <p style="font-size: 12px; color: #666; text-align: center; margin-top: 20px;">
+      You're receiving this email because you're a member of KMIT Clubs Hub.<br>
+      <a href="${unsubscribeUrl}" style="color: #666; text-decoration: underline;">Unsubscribe from these emails</a>
+    </p>
+  `;
+  
+  return html + unsubscribeFooter;
+}
+
+/**
+ * Send notification email with unsubscribe support
+ * Workplan Line 368: Unsubscribe link (except URGENT)
+ * @param {Object} user - User object with _id and email
+ * @param {string} notificationType - Type of notification
+ * @param {string} priority - Priority level (URGENT, HIGH, MEDIUM, LOW)
+ * @param {Object} mailOptions - Mail options (subject, html, text)
+ */
+async function sendNotificationEmail(user, notificationType, priority, mailOptions) {
+  // Check unsubscribe preferences (except for URGENT priority)
+  if (priority !== 'URGENT') {
+    const { Unsubscribe } = require('../modules/notification/unsubscribe.model');
+    const prefs = await Unsubscribe.getOrCreatePreferences(user._id, user.email);
+    
+    // Check if user has unsubscribed from this type
+    if (prefs.hasUnsubscribed(notificationType)) {
+      console.log(`User ${user.email} has unsubscribed from ${notificationType}, skipping email`);
+      return null;
+    }
+    
+    // Add unsubscribe link to email
+    if (mailOptions.html) {
+      mailOptions.html = addUnsubscribeLink(mailOptions.html, prefs.unsubscribeToken, notificationType);
+    }
+  }
+  
+  // Send email
+  return sendMail({
+    to: user.email,
+    ...mailOptions
+  });
+}
+
 module.exports = { 
   transporter, 
   verifyTransport, 
   sendMail, 
   sendTemplatedEmail,
   sendBulkTemplatedEmail,
+  addUnsubscribeLink,
+  sendNotificationEmail,
   templates 
 };

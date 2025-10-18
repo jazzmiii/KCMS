@@ -29,5 +29,20 @@ module.exports = {
 
   markRead: Joi.object({
     isRead: Joi.boolean().required()
+  }),
+
+  // Push Notification Validators
+  pushSubscribe: Joi.object({
+    subscription: Joi.object({
+      endpoint: Joi.string().uri().required(),
+      keys: Joi.object({
+        p256dh: Joi.string().required(),
+        auth: Joi.string().required()
+      }).required()
+    }).required()
+  }),
+
+  pushUnsubscribe: Joi.object({
+    endpoint: Joi.string().uri().required()
   })
 };

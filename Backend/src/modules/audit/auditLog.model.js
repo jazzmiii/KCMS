@@ -34,4 +34,38 @@ AuditLogSchema.index({ user: 1, createdAt: -1 });
 AuditLogSchema.index({ action: 1, createdAt: -1 });
 AuditLogSchema.index({ severity: 1, createdAt: -1 });
 
+// Workplan Line 495-498: 2-year retention policy
+// TTL index - automatically delete logs older than 2 years (730 days)
+AuditLogSchema.index({ createdAt: 1 }, { expireAfterSeconds: 63072000 }); // 2 years in seconds
+
+// Prevent modifications to audit logs (immutable after creation)
+AuditLogSchema.pre('save', function(next) {
+  if (!this.isNew) {
+    return next(new Error('Audit logs are immutable and cannot be modified'));
+  }
+  next();
+});
+
+// Prevent updates
+AuditLogSchema.pre('findOneAndUpdate', function(next) {
+  next(new Error('Audit logs are immutable and cannot be updated'));
+});
+
+AuditLogSchema.pre('updateOne', function(next) {
+  next(new Error('Audit logs are immutable and cannot be updated'));
+});
+
+AuditLogSchema.pre('updateMany', function(next) {
+  next(new Error('Audit logs are immutable and cannot be updated'));
+});
+
+// Prevent deletions (except through TTL)
+AuditLogSchema.pre('deleteOne', function(next) {
+  next(new Error('Audit logs cannot be manually deleted. They will auto-expire after 2 years.'));
+});
+
+AuditLogSchema.pre('deleteMany', function(next) {
+  next(new Error('Audit logs cannot be manually deleted. They will auto-expire after 2 years.'));
+});
+
 module.exports.AuditLog = mongoose.model('AuditLog', AuditLogSchema);

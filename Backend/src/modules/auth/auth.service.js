@@ -9,6 +9,7 @@ const { Session } = require('./session.model');
 const { PasswordReset } = require('./passwordReset.model');
 const { sendMail } = require('../../utils/mail');
 const { genRandom, hashSha256, hashBcrypt, compareBcrypt } = require('../../utils/crypto');
+const { parseUserAgent, generateDeviceFingerprint, isDeviceRecognized } = require('../../utils/deviceFingerprint');
 const auditService        = require('../audit/audit.service');
 const notificationService = require('../notification/notification.service');
 
@@ -153,14 +154,30 @@ exports.completeProfile = async (userId, profileData, userContext) => {
   const bcryptHash = await hashBcrypt(raw);
   const expiresAt = new Date(Date.now() + ms(config.REFRESH_TOKEN_EXPIRY));
 
-  await new Session({
+  // Prepare session data with device fingerprinting
+  const sessionData = {
     user: user._id,
     sha256Hash: sha,
     bcryptHash,
     expiresAt,
     userAgent: userContext.userAgent,
     ip: userContext.ip
-  }).save();
+  };
+
+  // Add device fingerprinting if available (from login flow)
+  if (userContext.deviceFingerprint) {
+    sessionData.deviceFingerprint = userContext.deviceFingerprint;
+    sessionData.deviceInfo = userContext.deviceInfo;
+    sessionData.isNewDevice = userContext.isNewDevice || false;
+    
+    // Remember device for 30 days (Workplan: optional "Remember Device" for 30 days)
+    if (userContext.rememberDevice) {
+      sessionData.rememberDevice = true;
+      sessionData.rememberDeviceExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+    }
+  }
+
+  await new Session(sessionData).save();
 
   // notification: role assigned
   await notificationService.create({
@@ -180,13 +197,33 @@ exports.completeProfile = async (userId, profileData, userContext) => {
     userAgent: userContext.userAgent
   });
 
+  // Send welcome email with club discovery link (Workplan requirement: Line 26)
+  await sendMail({
+    to: user.email,
+    subject: 'Welcome to KMIT Clubs Hub!',
+    html: `
+      <h2>Welcome to KMIT Clubs Hub, ${profileData.name}!</h2>
+      <p>Your registration is complete. We're excited to have you join our community!</p>
+      <p><strong>Your Details:</strong></p>
+      <ul>
+        <li>Roll Number: ${user.rollNumber}</li>
+        <li>Email: ${user.email}</li>
+        <li>Department: ${profileData.department}</li>
+        <li>Year: ${profileData.year}</li>
+      </ul>
+      <p>Start exploring clubs and get involved:</p>
+      <p><a href="${config.FRONTEND_URL}/clubs" style="background-color: #4CAF50; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">Discover Clubs</a></p>
+      <p>Best regards,<br>KMIT Clubs Team</p>
+    `
+  });
+
   return { user, tokens: { accessToken, refreshToken: raw } };
 };
 
 /**
  * LOGIN
  */
-exports.login = async ({ identifier, password }, userContext) => {
+exports.login = async ({ identifier, password, rememberDevice }, userContext) => {
   const user = await User.findOne({
     $or: [{ email: identifier }, { rollNumber: identifier }]
   });
@@ -221,6 +258,49 @@ exports.login = async ({ identifier, password }, userContext) => {
   user.loginAttempts = 0;
   user.accountLockedUntil = null;
   await user.save();
+
+  // Device fingerprinting for security (Workplan requirement)
+  const deviceFingerprint = generateDeviceFingerprint(userContext.userAgent, userContext.ip);
+  const deviceInfo = parseUserAgent(userContext.userAgent);
+  const isKnownDevice = await isDeviceRecognized(user._id, deviceFingerprint);
+
+  // Send notification for new device login
+  if (!isKnownDevice) {
+    await sendMail({
+      to: user.email,
+      subject: 'New Device Login Detected',
+      html: `
+        <h2>New Device Login</h2>
+        <p>We detected a login to your account from a new device:</p>
+        <ul>
+          <li><strong>Device:</strong> ${deviceInfo.deviceName}</li>
+          <li><strong>Browser:</strong> ${deviceInfo.browser} ${deviceInfo.browserVersion}</li>
+          <li><strong>OS:</strong> ${deviceInfo.os} ${deviceInfo.osVersion}</li>
+          <li><strong>IP Address:</strong> ${userContext.ip}</li>
+          <li><strong>Time:</strong> ${new Date().toLocaleString()}</li>
+        </ul>
+        <p>If this was you, no action is needed. If you don't recognize this activity, please change your password immediately.</p>
+        <p><a href="${config.FRONTEND_URL}/change-password">Change Password</a></p>
+      `
+    });
+
+    await notificationService.create({
+      user: user._id,
+      type: 'system_maintenance',
+      payload: { 
+        reason: 'new_device_login',
+        deviceName: deviceInfo.deviceName,
+        ip: userContext.ip
+      },
+      priority: 'HIGH'
+    });
+  }
+
+  // Add device context to userContext for session creation
+  userContext.deviceFingerprint = deviceFingerprint;
+  userContext.deviceInfo = deviceInfo;
+  userContext.isNewDevice = !isKnownDevice;
+  userContext.rememberDevice = rememberDevice || false;
 
   // issue tokens / complete profile
   const result = await this.completeProfile(user._id, user.profile, userContext);
@@ -485,6 +565,11 @@ exports.resetPassword = async ({ identifier, otp, newPassword }, userContext) =>
     usedAt: null
   });
   if (!rec) throw Object.assign(new Error('Invalid or expired token/OTP'), { statusCode: 400 });
+
+  // Workplan Line 18: Validate password doesn't contain roll number
+  if (newPassword.toLowerCase().includes(user.rollNumber.toLowerCase())) {
+    throw Object.assign(new Error('Password cannot contain your roll number'), { statusCode: 400 });
+  }
 
   // update password
   await user.setPassword(newPassword);

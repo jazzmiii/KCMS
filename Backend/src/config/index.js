@@ -72,6 +72,11 @@ const base = {
   CACHE_TTL: parseInt(process.env.CACHE_TTL) || 3600,
   SEARCH_RESULTS_LIMIT: parseInt(process.env.SEARCH_RESULTS_LIMIT) || 50,
   
+  // Push Notifications (VAPID keys for web push)
+  VAPID_PUBLIC_KEY: process.env.VAPID_PUBLIC_KEY,
+  VAPID_PRIVATE_KEY: process.env.VAPID_PRIVATE_KEY,
+  VAPID_SUBJECT: process.env.VAPID_SUBJECT || 'mailto:support@kmit.in',
+  
   // Monitoring
   ENABLE_METRICS: process.env.ENABLE_METRICS === 'true',
   METRICS_PORT: parseInt(process.env.METRICS_PORT) || 9090,

@@ -39,9 +39,15 @@ const clubService = {
     return response.data;
   },
 
-  // Archive Club
-  archiveClub: async (clubId) => {
-    const response = await api.delete(`/clubs/${clubId}`);
+  // Archive Club (with reason)
+  archiveClub: async (clubId, data) => {
+    const response = await api.delete(`/clubs/${clubId}`, { data });
+    return response.data;
+  },
+
+  // Approve/Reject Archive Request (Coordinator only)
+  approveArchiveRequest: async (clubId, data) => {
+    const response = await api.post(`/clubs/${clubId}/archive/approve`, data);
     return response.data;
   },
 
@@ -88,6 +94,18 @@ const clubService = {
   // Remove Member from Club
   removeMember: async (clubId, memberId) => {
     const response = await api.delete(`/clubs/${clubId}/members/${memberId}`);
+    return response.data;
+  },
+
+  // Approve Member (update status to 'approved')
+  approveMember: async (clubId, memberId) => {
+    const response = await api.patch(`/clubs/${clubId}/members/${memberId}`, { status: 'approved' });
+    return response.data;
+  },
+
+  // Reject Member (update status to 'rejected')
+  rejectMember: async (clubId, memberId) => {
+    const response = await api.patch(`/clubs/${clubId}/members/${memberId}`, { status: 'rejected' });
     return response.data;
   },
 };

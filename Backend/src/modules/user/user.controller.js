@@ -99,7 +99,8 @@ exports.getMyClubs = async (req, res, next) => {
 exports.listUsers = async (req, res, next) => {
   try {
     const { page, limit, ...filters } = req.query;
-    const data = await userService.listUsers(filters, page, limit);
+    // Pass user context so service can filter based on permissions
+    const data = await userService.listUsers(filters, page, limit, req.user);
     successResponse(res, data);
   } catch (err) {
     next(err);

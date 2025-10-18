@@ -16,6 +16,7 @@ const CoordinatorDashboard = () => {
   const [assignedClubs, setAssignedClubs] = useState([]);
   const [pendingEvents, setPendingEvents] = useState([]);
   const [pendingSettingsClubs, setPendingSettingsClubs] = useState([]);
+  const [pendingArchiveClubs, setPendingArchiveClubs] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -49,14 +50,20 @@ const CoordinatorDashboard = () => {
       // ✅ Count clubs with pending settings changes (president changed sensitive data)
       const clubsWithPendingSettings = assignedClubs.filter(club => club.pendingSettings);
 
+      // ✅ Count clubs with pending archive requests  
+      const clubsWithPendingArchive = assignedClubs.filter(club => 
+        club.status === 'pending_archive' && club.archiveRequest
+      );
+
       setAssignedClubs(assignedClubs);
       setPendingEvents(myPendingEvents);
       setPendingSettingsClubs(clubsWithPendingSettings);
+      setPendingArchiveClubs(clubsWithPendingArchive);
 
       setStats({
         assignedClubs: clubsRes.data?.total || 0,
-        // ✅ Pending = Events pending coordinator + Club settings pending approval
-        pendingEvents: myPendingEvents.length + clubsWithPendingSettings.length,
+        // ✅ Pending = Events + Settings + Archive requests
+        pendingEvents: myPendingEvents.length + clubsWithPendingSettings.length + clubsWithPendingArchive.length,
         totalEvents: coordinatorEvents.length,
       });
     } catch (error) {
@@ -89,6 +96,38 @@ const CoordinatorDashboard = () => {
       fetchDashboardData();
     } catch (error) {
       alert('Failed to reject event: ' + (error.response?.data?.message || error.message));
+    }
+  };
+
+  const handleApproveArchive = async (clubId) => {
+    if (!window.confirm('Are you sure you want to approve this archive request? The club will be archived.')) {
+      return;
+    }
+
+    try {
+      await clubService.approveArchiveRequest(clubId, { approved: true });
+      alert('✅ Archive request approved successfully!');
+      fetchDashboardData();
+    } catch (error) {
+      console.error('Failed to approve archive:', error);
+      alert('Failed to approve archive: ' + (error.response?.data?.message || error.message));
+    }
+  };
+
+  const handleRejectArchive = async (clubId) => {
+    const reason = prompt('Please provide a reason for rejecting the archive request:');
+    if (!reason || reason.trim().length < 10) {
+      alert('Rejection reason must be at least 10 characters');
+      return;
+    }
+
+    try {
+      await clubService.approveArchiveRequest(clubId, { approved: false, reason: reason.trim() });
+      alert('✅ Archive request rejected');
+      fetchDashboardData();
+    } catch (error) {
+      console.error('Failed to reject archive:', error);
+      alert('Failed to reject archive: ' + (error.response?.data?.message || error.message));
     }
   };
 
@@ -206,6 +245,78 @@ const CoordinatorDashboard = () => {
             <p className="no-data">No pending event approvals</p>
           )}
         </div>
+
+        {/* Pending Archive Requests */}
+        {pendingArchiveClubs.length > 0 && (
+          <div className="dashboard-section">
+            <div className="section-header">
+              <h2>🗄️ Pending Archive Requests</h2>
+              <Link to="/clubs" className="view-all">View All →</Link>
+            </div>
+            <div className="table-container">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Club Name</th>
+                    <th>Category</th>
+                    <th>Requested By</th>
+                    <th>Reason</th>
+                    <th>Requested On</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingArchiveClubs.map((club) => (
+                    <tr key={club._id}>
+                      <td>
+                        <div className="table-cell-with-icon">
+                          {club.logoUrl ? (
+                            <img src={club.logoUrl} alt={club.name} className="table-icon" />
+                          ) : (
+                            <div className="table-icon-placeholder">{club.name.charAt(0)}</div>
+                          )}
+                          <span>{club.name}</span>
+                        </div>
+                      </td>
+                      <td><span className="badge badge-info">{club.category}</span></td>
+                      <td>{club.archiveRequest?.requestedBy?.profile?.name || club.archiveRequest?.requestedBy?.email || 'Unknown'}</td>
+                      <td>
+                        <div style={{ maxWidth: '300px', whiteSpace: 'pre-wrap' }}>
+                          {club.archiveRequest?.reason || 'No reason provided'}
+                        </div>
+                      </td>
+                      <td>
+                        {club.archiveRequest?.requestedAt 
+                          ? new Date(club.archiveRequest.requestedAt).toLocaleDateString()
+                          : 'N/A'
+                        }
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                          <button 
+                            onClick={() => handleApproveArchive(club._id)}
+                            className="btn btn-sm btn-success"
+                          >
+                            ✓ Approve
+                          </button>
+                          <button 
+                            onClick={() => handleRejectArchive(club._id)}
+                            className="btn btn-sm btn-danger"
+                          >
+                            ✗ Reject
+                          </button>
+                          <Link to={`/clubs/${club._id}`} className="btn btn-sm btn-outline">
+                            View Club
+                          </Link>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         {/* Pending Club Settings Approvals */}
         {pendingSettingsClubs.length > 0 && (

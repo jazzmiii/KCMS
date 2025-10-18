@@ -2,11 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import Layout from '../../components/Layout';
 import userService from '../../services/userService';
+import { ROLE_DISPLAY_NAMES } from '../../utils/roleConstants';
 import '../../styles/Profile.css';
 
 const ProfilePage = () => {
   const { user, updateUser } = useAuth();
   const [profile, setProfile] = useState(null);
+  const [clubMemberships, setClubMemberships] = useState([]);
   const [editing, setEditing] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
@@ -31,14 +33,20 @@ const ProfilePage = () => {
 
   const fetchProfile = async () => {
     try {
-      const response = await userService.getMe();
-      setProfile(response.data.user);
+      const [profileRes, clubsRes] = await Promise.all([
+        userService.getMe(),
+        userService.getMyClubs()
+      ]);
+      
+      setProfile(profileRes.data.user);
+      setClubMemberships(clubsRes.data?.clubs || []);
+      
       setFormData({
-        name: response.data.user.profile?.name || '',
-        phone: response.data.user.profile?.phone || '',
-        department: response.data.user.profile?.department || '',
-        year: response.data.user.profile?.year || '',
-        batch: response.data.user.profile?.batch || '',
+        name: profileRes.data.user.profile?.name || '',
+        phone: profileRes.data.user.profile?.phone || '',
+        department: profileRes.data.user.profile?.department || '',
+        year: profileRes.data.user.profile?.year || '',
+        batch: profileRes.data.user.profile?.batch || '',
       });
     } catch (error) {
       console.error('Error fetching profile:', error);
@@ -298,15 +306,15 @@ const ProfilePage = () => {
             </div>
           )}
 
-          {profile?.roles?.scoped && profile.roles.scoped.length > 0 && (
+          {clubMemberships && clubMemberships.length > 0 && (
             <div className="profile-card">
               <h3>My Club Roles</h3>
               <div className="club-roles-list">
-                {profile.roles.scoped.map((scopedRole, index) => (
+                {clubMemberships.map((membership, index) => (
                   <div key={index} className="club-role-item">
-                    <span className="club-name">{scopedRole.clubName || 'Unknown Club'}</span>
+                    <span className="club-name">{membership.club?.name || 'Unknown Club'}</span>
                     <div className="role-badges">
-                      <span className="badge badge-info">{scopedRole.role}</span>
+                      <span className="badge badge-info">{ROLE_DISPLAY_NAMES[membership.role] || membership.role}</span>
                     </div>
                   </div>
                 ))}

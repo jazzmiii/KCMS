@@ -176,17 +176,16 @@ const RecruitmentDetailPage = () => {
               <h2>Apply Now</h2>
               
               {/* 3-Club Limit Warning */}
-              {myClubsCount >= 3 && (
-                <div className="alert alert-warning" style={{ marginBottom: '20px', padding: '16px', backgroundColor: '#fef3c7', border: '1px solid: #f59e0b', borderRadius: '8px' }}>
+              {myClubsCount >= 3 ? (
+                <div className="alert alert-warning" style={{ marginBottom: '20px', padding: '16px', backgroundColor: '#fef3c7', border: '1px solid #f59e0b', borderRadius: '8px' }}>
                   <h4 style={{ margin: '0 0 8px 0', color: '#92400e' }}>⚠️ Maximum Club Limit Reached</h4>
                   <p style={{ margin: 0, color: '#78350f' }}>
                     You are already a member of {myClubsCount} clubs. Students can join a maximum of 3 clubs. 
                     You cannot apply to this recruitment unless you leave one of your current clubs.
                   </p>
                 </div>
-              )}
-
-              <form onSubmit={handleSubmit} className="application-form">
+              ) : (
+                <form onSubmit={handleSubmit} className="application-form">
                 <div className="form-group">
                   <label htmlFor="whyJoin">Why do you want to join this club? *</label>
                   <textarea
@@ -266,6 +265,7 @@ const RecruitmentDetailPage = () => {
                   </button>
                 </div>
               </form>
+              )}
             </div>
           )}
 

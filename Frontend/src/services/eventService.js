@@ -59,11 +59,39 @@ const eventService = {
     return response.data;
   },
 
+  // Update Event (only draft events can be edited)
+  update: async (id, formData) => {
+    const response = await api.patch(`/events/${id}`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+    return response.data;
+  },
+
+  // Delete Event (only draft events can be deleted)
+  delete: async (id) => {
+    const response = await api.delete(`/events/${id}`);
+    return response.data;
+  },
+
   // NOTE: Budget approval is handled via BudgetRequest status updates in Backend
   // There is no separate endpoint for approveBudget - removed as it called non-existent route
 
   // NOTE: Post-event report submission endpoint doesn't exist in Backend
   // Removed submitReport() method - endpoint needs to be implemented in Backend first
+
+  // Financial Override (Coordinator only - Backend Gap Implementation)
+  financialOverride: async (id, data) => {
+    const response = await api.post(`/events/${id}/financial-override`, data);
+    return response.data;
+  },
+
+  // Upload Completion Materials (Photos, Report, Attendance, Bills)
+  uploadMaterials: async (id, formData) => {
+    const response = await api.post(`/events/${id}/upload-materials`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+    return response.data;
+  },
 };
 
 export default eventService;

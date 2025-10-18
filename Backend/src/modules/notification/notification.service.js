@@ -35,11 +35,19 @@ class NotificationService {
     return notif;
   }
 
-  async list(userId, { page = 1, limit = 20, type, priority, isRead }) {
+  async list(userId, { page = 1, limit = 20, type, priority, isRead, includeOlder = false }) {
     const query = { user: userId };
+    
+    // Workplan Line 362: Last 30 days visible by default, pagination for older
+    if (!includeOlder) {
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      query.createdAt = { $gte: thirtyDaysAgo };
+    }
+    
     if (type) query.type = type;
     if (priority) query.priority = priority;
     if (typeof isRead === 'boolean') query.isRead = isRead;
+    
     const skip = (page - 1) * limit;
     const [total, items] = await Promise.all([
       Notification.countDocuments(query),
@@ -48,7 +56,26 @@ class NotificationService {
         .skip(skip)
         .limit(limit)
     ]);
-    return { total, page, limit, items };
+    
+    return { 
+      total, 
+      page, 
+      limit, 
+      items,
+      hasOlder: !includeOlder && await this.hasOlderNotifications(userId)
+    };
+  }
+  
+  /**
+   * Check if user has notifications older than 30 days
+   */
+  async hasOlderNotifications(userId) {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const count = await Notification.countDocuments({
+      user: userId,
+      createdAt: { $lt: thirtyDaysAgo }
+    });
+    return count > 0;
   }
 
   async markRead(userId, id, isRead) {

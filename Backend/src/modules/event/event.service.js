@@ -707,6 +707,219 @@ class EventService {
 
     return evt;
   }
+  /**
+   * Update an existing event (only draft events can be edited)
+   * @param {string} eventId - Event ID
+   * @param {object} data - Updated event data
+   * @param {object} files - Optional new file attachments
+   * @param {object} userContext - User context for audit log
+   * @returns {object} Updated event
+   */
+  async update(eventId, data, files, userContext) {
+    const event = await Event.findById(eventId).populate('club');
+    if (!event) {
+      const err = new Error('Event not found');
+      err.statusCode = 404;
+      throw err;
+    }
+
+    // ✅ Only draft events can be edited (prevent editing submitted/approved events)
+    if (event.status !== 'draft') {
+      const err = new Error(`Cannot edit event with status '${event.status}'. Only draft events can be edited.`);
+      err.statusCode = 400;
+      throw err;
+    }
+
+    // Store old values for audit log
+    const oldValue = event.toObject();
+
+    // Update fields
+    const allowedFields = [
+      'title', 'description', 'objectives', 'dateTime', 'duration',
+      'venue', 'capacity', 'expectedAttendees', 'isPublic', 'budget', 'guestSpeakers'
+    ];
+    
+    allowedFields.forEach(field => {
+      if (data[field] !== undefined) {
+        event[field] = data[field];
+      }
+    });
+
+    // Handle file uploads (replace existing files)
+    if (files?.proposal) {
+      const r = await cloudinary.uploadFile(files.proposal[0].path, { folder: 'events/proposals' });
+      event.attachments.proposalUrl = r.secure_url;
+    }
+    if (files?.budgetBreakdown) {
+      const r = await cloudinary.uploadFile(files.budgetBreakdown[0].path, { folder: 'events/budgets' });
+      event.attachments.budgetBreakdownUrl = r.secure_url;
+    }
+    if (files?.venuePermission) {
+      const r = await cloudinary.uploadFile(files.venuePermission[0].path, { folder: 'events/permissions' });
+      event.attachments.venuePermissionUrl = r.secure_url;
+    }
+
+    // ✅ Keep status as 'draft' after editing (user can submit again for approval)
+    event.status = 'draft';
+
+    await event.save();
+
+    // Audit log
+    await auditService.log({
+      user: userContext.id,
+      action: 'EVENT_UPDATE',
+      target: `Event:${event._id}`,
+      oldValue,
+      newValue: event.toObject(),
+      ip: userContext.ip,
+      userAgent: userContext.userAgent
+    });
+
+    return event;
+  }
+
+  /**
+   * Delete an event (only draft events can be deleted)
+   * @param {string} eventId - Event ID
+   * @param {object} userContext - User context for audit log
+   * @returns {object} Success message
+   */
+  async delete(eventId, userContext) {
+    const event = await Event.findById(eventId).populate('club');
+    if (!event) {
+      const err = new Error('Event not found');
+      err.statusCode = 404;
+      throw err;
+    }
+
+    // ✅ Only draft events can be deleted (prevent deleting submitted/approved/published events)
+    if (event.status !== 'draft') {
+      const err = new Error(`Cannot delete event with status '${event.status}'. Only draft events can be deleted.`);
+      err.statusCode = 400;
+      throw err;
+    }
+
+    // Store event data for audit log before deletion
+    const eventData = event.toObject();
+
+    // Hard delete the event
+    await Event.findByIdAndDelete(eventId);
+
+    // Audit log
+    await auditService.log({
+      user: userContext.id,
+      action: 'EVENT_DELETE',
+      target: `Event:${eventId}`,
+      oldValue: eventData,
+      ip: userContext.ip,
+      userAgent: userContext.userAgent
+    });
+
+    // ✅ Notify club members about event deletion
+    // Get all approved club members
+    const members = await Membership.find({ 
+      club: eventData.club._id || eventData.club, 
+      status: 'approved' 
+    }).distinct('user');
+    
+    // Create individual notifications for each member
+    await Promise.all(members.map(userId =>
+      notificationSvc.create({
+        user: userId,
+        type: 'system_maintenance', // Using existing enum value (closest match for event deletion)
+        payload: { 
+          message: `Event "${eventData.title}" has been deleted`,
+          eventTitle: eventData.title,
+          eventDate: eventData.dateTime,
+          deletedBy: userContext.id
+        },
+        priority: 'MEDIUM'
+      })
+    ));
+
+    return { message: 'Event deleted successfully' };
+  }
+
+  /**
+   * Upload completion materials (photos, report, attendance, bills)
+   */
+  async uploadCompletionMaterials(eventId, files, data, userContext) {
+    const event = await Event.findById(eventId);
+    if (!event) {
+      const err = new Error('Event not found');
+      err.statusCode = 404;
+      throw err;
+    }
+
+    // Check if event is in pending_completion or incomplete status
+    if (event.status !== 'pending_completion' && event.status !== 'incomplete') {
+      const err = new Error(`Cannot upload materials for events with status '${event.status}'`);
+      err.statusCode = 400;
+      throw err;
+    }
+
+    let updated = false;
+
+    // Handle photo uploads
+    if (files && files.photos) {
+      const photoUrls = files.photos.map(file => `/uploads/${file.filename}`);
+      event.photos = event.photos || [];
+      event.photos.push(...photoUrls);
+      event.completionChecklist.photosUploaded = event.photos.length >= 5;
+      updated = true;
+    }
+
+    // Handle report upload
+    if (files && files.report && files.report.length > 0) {
+      event.reportUrl = `/uploads/${files.report[0].filename}`;
+      event.completionChecklist.reportUploaded = true;
+      event.reportSubmittedAt = new Date();
+      updated = true;
+    }
+
+    // Handle attendance upload
+    if (files && files.attendance && files.attendance.length > 0) {
+      event.attendanceUrl = `/uploads/${files.attendance[0].filename}`;
+      event.completionChecklist.attendanceUploaded = true;
+      updated = true;
+    }
+
+    // Handle bills upload
+    if (files && files.bills) {
+      const billUrls = files.bills.map(file => `/uploads/${file.filename}`);
+      event.billsUrls = event.billsUrls || [];
+      event.billsUrls.push(...billUrls);
+      event.completionChecklist.billsUploaded = event.budget > 0 ? event.billsUrls.length > 0 : true;
+      updated = true;
+    }
+
+    if (!updated) {
+      const err = new Error('No files uploaded');
+      err.statusCode = 400;
+      throw err;
+    }
+
+    // Check if all materials are complete
+    const isComplete = Object.values(event.completionChecklist).every(v => v === true);
+    if (isComplete) {
+      event.status = 'completed';
+      event.completedAt = new Date();
+    }
+
+    await event.save();
+
+    // Audit log
+    await auditService.log({
+      user: userContext.id,
+      action: 'MATERIALS_UPLOADED',
+      target: `Event:${eventId}`,
+      newValue: { completionChecklist: event.completionChecklist, status: event.status },
+      ip: userContext.ip,
+      userAgent: userContext.userAgent
+    });
+
+    return event;
+  }
 }
 
 module.exports = new EventService();

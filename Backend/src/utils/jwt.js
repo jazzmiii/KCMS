@@ -71,7 +71,10 @@ function sign(payload, options = {}) {
 }
 
 /**
- * Verify a JWT token
+ * Verify a JWT token with migration support
+ * Workplan Line 622: JWT signing (RS256)
+ * Supports both HS256 and RS256 during migration period
+ * 
  * @param {string} token - JWT token to verify
  * @param {Object} options - JWT verify options
  * @returns {Object} Decoded token payload
@@ -86,22 +89,40 @@ function verify(token, options = {}) {
   const mergedOptions = { ...defaultOptions, ...options };
   
   try {
+    // Try verifying with current algorithm/key
     return jwt.verify(token, publicKey, mergedOptions);
-  } catch (error) {
-    if (error.name === 'TokenExpiredError') {
+  } catch (primaryError) {
+    // During migration: if current is RS256 and verification fails,
+    // try fallback to HS256 for backward compatibility
+    if (config.JWT_MIGRATION_MODE === 'true' && algorithm === 'RS256' && config.JWT_SECRET) {
+      try {
+        console.log('🔄 Migration mode: Attempting HS256 verification for legacy token');
+        const fallbackOptions = {
+          ...mergedOptions,
+          algorithms: ['HS256']
+        };
+        return jwt.verify(token, config.JWT_SECRET, fallbackOptions);
+      } catch (fallbackError) {
+        // If both fail, throw the original error
+        console.warn('⚠️  Token verification failed with both RS256 and HS256');
+      }
+    }
+    
+    // Handle specific error types
+    if (primaryError.name === 'TokenExpiredError') {
       const err = new Error('Token expired');
       err.name = 'TokenExpiredError';
-      err.expiredAt = error.expiredAt;
+      err.expiredAt = primaryError.expiredAt;
       throw err;
     }
     
-    if (error.name === 'JsonWebTokenError') {
+    if (primaryError.name === 'JsonWebTokenError') {
       const err = new Error('Invalid token');
       err.name = 'JsonWebTokenError';
       throw err;
     }
     
-    throw error;
+    throw primaryError;
   }
 }
 
@@ -125,7 +146,14 @@ function getInfo() {
     audience: 'kmit-students',
     accessTokenExpiry: config.JWT_EXPIRY,
     refreshTokenExpiry: config.REFRESH_TOKEN_EXPIRY,
-    isAsymmetric: algorithm.startsWith('RS') || algorithm.startsWith('ES')
+    isAsymmetric: algorithm.startsWith('RS') || algorithm.startsWith('ES'),
+    migrationMode: config.JWT_MIGRATION_MODE === 'true',
+    supportsHS256Fallback: config.JWT_MIGRATION_MODE === 'true' && !!config.JWT_SECRET,
+    keySource: (config.JWT_PRIVATE_KEY_PATH && config.JWT_PUBLIC_KEY_PATH) 
+      ? 'files' 
+      : (config.JWT_PRIVATE_KEY && config.JWT_PUBLIC_KEY) 
+        ? 'environment' 
+        : 'symmetric'
   };
 }
 

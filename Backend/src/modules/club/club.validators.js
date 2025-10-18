@@ -24,7 +24,7 @@ module.exports = {
     category: Joi.string().valid('technical','cultural','sports','arts','social'),
     search: Joi.string().allow(''),
     coordinator: objectId.optional(),  // ✅ Allow filtering by coordinator
-    status: Joi.string().valid('active','archived','pending_approval').optional(), // ✅ Allow filtering by status
+    status: Joi.string().valid('active','archived').optional(), // ✅ Allow filtering by status
     _t: Joi.number().optional(),       // ✅ Allow cache-busting timestamp
     page: Joi.number().integer().min(1).default(1),
     limit: Joi.number().integer().min(1).max(100).default(20)
@@ -58,7 +58,18 @@ module.exports = {
     action: Joi.string().valid('submit','approve').required()
   }),
 
-  archiveClubSchema: Joi.object({}),
+  archiveClubSchema: Joi.object({
+    reason: Joi.string().min(20).max(500).required()
+  }),
+
+  approveArchiveSchema: Joi.object({
+    approved: Joi.boolean().required(),
+    reason: Joi.string().min(10).when('approved', {
+      is: false,
+      then: Joi.required(),
+      otherwise: Joi.optional()
+    })
+  }),
 
   getMembersSchema: Joi.object({
     page: Joi.number().integer().min(1).default(1),

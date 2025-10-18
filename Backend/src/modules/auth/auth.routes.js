@@ -63,4 +63,9 @@ router.post('/reset-password',
   authCtrl.resetPassword
 );
 
+// JWT Configuration Info (public endpoint for monitoring)
+router.get('/jwt-info',
+  authCtrl.getJwtInfo
+);
+
 module.exports = router;

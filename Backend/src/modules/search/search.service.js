@@ -270,6 +270,7 @@ class SearchService {
   }
 
   // Search users with advanced filters
+  // Workplan Line 510: Enhanced user search with multiple filters
   async searchUsers(query, filters = {}, skip = 0, limit = 20, sortBy = 'relevance') {
     let searchQuery = {};
 
@@ -289,6 +290,26 @@ class SearchService {
     if (filters.role) searchQuery['roles.global'] = filters.role;
     if (filters.status) searchQuery.status = filters.status;
 
+    // Enhanced: Filter by club membership
+    if (filters.clubId) {
+      const memberIds = await Membership.find({
+        club: filters.clubId,
+        status: 'approved'
+      }).distinct('user');
+      
+      searchQuery._id = filters.inClub ? { $in: memberIds } : { $nin: memberIds };
+    }
+
+    // Enhanced: Filter by multiple clubs
+    if (filters.clubIds && Array.isArray(filters.clubIds)) {
+      const memberIds = await Membership.find({
+        club: { $in: filters.clubIds },
+        status: 'approved'
+      }).distinct('user');
+      
+      searchQuery._id = { $in: memberIds };
+    }
+
     let sortOptions = {};
     switch (sortBy) {
       case 'name':
@@ -297,16 +318,48 @@ class SearchService {
       case 'rollNumber':
         sortOptions = { rollNumber: 1 };
         break;
+      case 'year':
+        sortOptions = { 'profile.year': 1, 'profile.name': 1 };
+        break;
+      case 'department':
+        sortOptions = { 'profile.department': 1, 'profile.name': 1 };
+        break;
       default:
         sortOptions = { createdAt: -1 };
     }
 
-    return User.find(searchQuery)
-      .select('-passwordHash')
+    const users = await User.find(searchQuery)
+      .select('-passwordHash -passwordHistory')
       .sort(sortOptions)
       .skip(skip)
       .limit(limit)
       .lean();
+
+    // Enhanced: Add club memberships to results
+    if (filters.includeClubs) {
+      const userIds = users.map(u => u._id);
+      const memberships = await Membership.find({
+        user: { $in: userIds },
+        status: 'approved'
+      }).populate('club', 'name category').lean();
+
+      // Group memberships by user
+      const membershipMap = {};
+      memberships.forEach(m => {
+        if (!membershipMap[m.user]) membershipMap[m.user] = [];
+        membershipMap[m.user].push({
+          club: m.club,
+          role: m.role
+        });
+      });
+
+      // Attach clubs to each user
+      users.forEach(u => {
+        u.clubs = membershipMap[u._id] || [];
+      });
+    }
+
+    return users;
   }
 
   // Search documents with advanced filters

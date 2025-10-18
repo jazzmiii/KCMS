@@ -236,7 +236,7 @@ const EditClubPage = () => {
 
           {/* Info Alert */}
           <div className="alert alert-info">
-            <strong>Note for Presidents:</strong> Changes to club name, category, and logo/banner require coordinator approval.
+            <strong>Note for Sr Club Heads:</strong> Changes to club name, category, and logo/banner require coordinator approval.
             Other changes will be applied immediately.
             {user?.roles?.global === 'admin' && (
               <>
