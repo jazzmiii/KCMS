@@ -108,6 +108,18 @@ const documentService = {
     document.body.removeChild(link);
     window.URL.revokeObjectURL(url);
   },
+
+  // Get photo quota status (Cloudinary limit check)
+  getPhotoQuota: async (clubId) => {
+    const response = await api.get(`/clubs/${clubId}/documents/quota`);
+    return response.data;
+  },
+
+  // Add Google Drive link for additional photos
+  addDriveLink: async (clubId, driveData) => {
+    const response = await api.post(`/clubs/${clubId}/documents/drive-link`, driveData);
+    return response.data;
+  },
 };
 
 export default documentService;

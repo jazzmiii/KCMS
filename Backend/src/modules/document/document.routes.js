@@ -13,6 +13,41 @@ const upload       = multer({ dest: 'uploads/' });
 const v            = require('./document.validators');
 const ctrl         = require('./document.controller');
 
+// Middleware: Extract clubId from URL if not in params (mergeParams fallback)
+router.use((req, res, next) => {
+  console.log('🔍 MIDDLEWARE DEBUG:');
+  console.log('  req.baseUrl:', req.baseUrl);
+  console.log('  req.originalUrl:', req.originalUrl);
+  console.log('  req.params before:', req.params);
+  
+  if (!req.params.clubId) {
+    // Try to extract from baseUrl
+    if (req.baseUrl) {
+      const match = req.baseUrl.match(/\/clubs\/([a-f0-9]+)/i);
+      console.log('  Match result:', match);
+      if (match) {
+        req.params.clubId = match[1];
+        console.log('  ✅ clubId extracted from baseUrl:', req.params.clubId);
+      }
+    }
+    
+    // If still not found, try originalUrl
+    if (!req.params.clubId && req.originalUrl) {
+      const match = req.originalUrl.match(/\/clubs\/([a-f0-9]+)/i);
+      console.log('  originalUrl match:', match);
+      if (match) {
+        req.params.clubId = match[1];
+        console.log('  ✅ clubId extracted from originalUrl:', req.params.clubId);
+      }
+    }
+  } else {
+    console.log('  ✅ clubId already in params:', req.params.clubId);
+  }
+  
+  console.log('  req.params after:', req.params);
+  next();
+});
+
 // Upload (single/multiple) - Core+ can upload media (Section 7.1)
 router.post(
   '/upload',
@@ -25,30 +60,28 @@ router.post(
   ctrl.upload
 );
 
-// List / Gallery - Members can view, Core+ can manage (Section 7.2)
+// List / Gallery - Public viewing for all authenticated users (Section 7.2)
 router.get(
   '/',
-  authenticate,
-  requireEither(['admin', 'coordinator'], ['member', 'core', 'president']), // Admin/Coordinator OR Club Members
+  authenticate, // All authenticated users can view gallery
   validate(v.clubIdParam, 'params'),
   validate(v.listSchema, 'query'),
   ctrl.list
 );
 
-// Download Original - Members can download (Section 7.2)
+// Download Original - Public download for all authenticated users (Section 7.2)
 router.get(
   '/:docId/download',
-  authenticate,
-  requireEither(['admin', 'coordinator'], ['member', 'core', 'president']), // Admin/Coordinator OR Club Members
+  authenticate, // All authenticated users can download
   validate(v.docIdParam, 'params'),
   ctrl.download
 );
 
-// Delete Document - President can delete (Section 7.2)
+// Delete Document - Leadership (President & Vice President) can delete (Section 7.2)
 router.delete(
   '/:docId',
   authenticate,
-  requireEither(['admin'], PRESIDENT_ONLY), // ✅ Admin OR President ONLY
+  requireEither(['admin'], ['president', 'vicePresident']), // ✅ Admin OR Leadership
   validate(v.docIdParam, 'params'),
   ctrl.delete
 );
@@ -62,11 +95,10 @@ router.post(
   ctrl.createAlbum
 );
 
-// Get Albums - Members can view albums (Section 7.2)
+// Get Albums - Public viewing for all authenticated users (Section 7.2)
 router.get(
   '/albums',
-  authenticate,
-  requireEither(['admin', 'coordinator'], ['member', 'core', 'president']), // Admin/Coordinator OR Club Members
+  authenticate, // All authenticated users can view albums
   ctrl.getAlbums
 );
 
@@ -99,22 +131,67 @@ router.get(
   ctrl.getAnalytics
 );
 
-// Search Documents - Members can search (Section 7.2)
+// Search Documents - Public search for all authenticated users (Section 7.2)
 router.get(
   '/search',
-  authenticate,
-  requireEither(['admin', 'coordinator'], ['member', 'core', 'president']), // Admin/Coordinator OR Club Members
+  authenticate, // All authenticated users can search
   validate(v.searchSchema, 'query'),
   ctrl.searchDocuments
 );
 
-// Get Download URL - Members can get download URLs (Section 7.2)
+// Get Download URL - Public download URLs for all authenticated users (Section 7.2)
 router.get(
   '/:docId/download-url',
-  authenticate,
-  requireEither(['admin', 'coordinator'], ['member', 'core', 'president']), // Admin/Coordinator OR Club Members
+  authenticate, // All authenticated users can get download URLs
   validate(v.docIdParam, 'params'),
   ctrl.getDownloadUrl
+);
+
+// Link Existing Photos to Events (Utility/Fix) - Admin/Coordinator or Club Leadership
+router.post(
+  '/link-to-events',
+  authenticate,
+  requireEither(['admin', 'coordinator'], ['president', 'vicePresident']), // Admin/Coordinator OR Club Leadership
+  ctrl.linkPhotosToEvents
+);
+
+// Get Storage Statistics - Leadership can view
+router.get(
+  '/storage/stats',
+  authenticate,
+  requireEither(['admin', 'coordinator'], ['president', 'vicePresident']),
+  ctrl.getStorageStats
+);
+
+// Find Duplicate Images - Leadership only
+router.get(
+  '/storage/duplicates',
+  authenticate,
+  requireEither(['admin', 'coordinator'], ['president', 'vicePresident']),
+  ctrl.findDuplicates
+);
+
+// Get Upload Signature for Direct Upload - Core+ can upload
+router.post(
+  '/upload/signature',
+  authenticate,
+  requireEither(['admin'], CORE_AND_PRESIDENT),
+  ctrl.getUploadSignature
+);
+
+// Add Google Drive Link (bypass 10 photo limit) - Core+ can add
+router.post(
+  '/drive-link',
+  authenticate,
+  requireEither(['admin'], CORE_AND_PRESIDENT),
+  ctrl.addDriveLink
+);
+
+// Get Photo Quota Status - All club members can view
+router.get(
+  '/quota',
+  authenticate,
+  ctrl.getPhotoQuota
 );
 
 module.exports = router;

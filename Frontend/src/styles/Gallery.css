@@ -406,3 +406,185 @@
     max-height: 60vh;
   }
 }
+
+/* Event Context Badge */
+.event-context-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 0.6rem 1rem;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+  animation: slideInRight 0.3s ease-out;
+}
+
+.event-context-badge span {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.badge-close {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  padding: 0;
+  font-size: 0.8rem;
+}
+
+.badge-close:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: scale(1.1);
+}
+
+.badge-close:active {
+  transform: scale(0.95);
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+ 
+/* Drive Link Card Styles */
+.drive-link-card {
+  border: 2px dashed var(--primary-color);
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+}
+
+.drive-card-content {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 250px;
+  text-align: center;
+}
+
+.drive-icon {
+  color: var(--primary-color);
+  margin-bottom: 1rem;
+  opacity: 0.8;
+}
+
+.drive-card-content h4 {
+  margin: 0.5rem 0;
+  font-size: 1.1rem;
+  color: var(--text-dark);
+}
+
+.photo-count {
+  font-size: 1rem;
+  color: var(--primary-color);
+  font-weight: 600;
+  margin: 0.5rem 0;
+}
+
+.drive-description {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin: 0.5rem 0 1rem 0;
+  max-width: 80%;
+}
+
+.drive-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.btn-sm {
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+}
+
+/* Quota Display */
+.quota-display {
+  margin-right: 1rem;
+}
+
+.quota-badge {
+  background: #e3f2fd;
+  color: #1976d2;
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  display: inline-block;
+  border: 1px solid #bbdefb;
+}
+
+.quota-badge.quota-warning {
+  background: #fff3e0;
+  color: #f57c00;
+  border-color: #ffe0b2;
+}
+
+.quota-badge.quota-full {
+  background: #ffebee;
+  color: #d32f2f;
+  border-color: #ffcdd2;
+}
+
+/* Drive Link Modal Info Boxes */
+.info-box {
+  background: #e3f2fd;
+  border-left: 4px solid #1976d2;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  border-radius: 4px;
+}
+
+.info-box p {
+  margin: 0.5rem 0;
+  font-size: 0.875rem;
+}
+
+.info-box p:first-child {
+  margin-top: 0;
+}
+
+.info-box p:last-child {
+  margin-bottom: 0;
+}
+
+.quota-info {
+  background: #f5f5f5;
+  padding: 0.75rem 1rem;
+  border-radius: 4px;
+  margin-bottom: 1.5rem;
+}
+
+.quota-info p {
+  margin: 0.25rem 0;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+/* Form small text */
+.form-group small {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-style: italic;
+}

@@ -1,5 +1,5 @@
 //src/modules/club/club.routes.js
-const router       = require('express').Router();
+const router       = require('express').Router({ mergeParams: true });
 const authenticate = require('../../middlewares/auth');
 const { 
   permit, 
@@ -167,5 +167,9 @@ router.post(
   validateUpload('image'), // Validate file type, size, and security
   ctrl.uploadBanner
 );
+
+// Mount document routes under clubs/:clubId/documents
+const documentRoutes = require('../document/document.routes');
+router.use('/:clubId/documents', documentRoutes);
 
 module.exports = router;

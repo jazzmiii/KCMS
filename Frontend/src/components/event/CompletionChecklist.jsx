@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import eventService from '../../services/eventService';
 import '../../styles/CompletionChecklist.css';
 
 const CompletionChecklist = ({ event, onUploadComplete, canManage }) => {
+  const navigate = useNavigate();
   const [uploading, setUploading] = useState(false);
   const [uploadingType, setUploadingType] = useState(null);
 
@@ -38,7 +40,7 @@ const CompletionChecklist = ({ event, onUploadComplete, canManage }) => {
       label: 'Event Photos',
       required: 'Minimum 5 photos',
       completed: event.completionChecklist?.photosUploaded || false,
-      count: event.photos?.length || 0,
+      count: event.photoCount || 0,
       requiredCount: 5,
       uploadType: 'photos'
     },
@@ -75,27 +77,32 @@ const CompletionChecklist = ({ event, onUploadComplete, canManage }) => {
   const totalCount = checklistItems.length;
   const progressPercentage = Math.round((completedCount / totalCount) * 100);
 
-  // Handle upload
+  // Handle navigation to Gallery for photo uploads
+  const handleNavigateToGallery = () => {
+    const clubId = event.club?._id || event.club;
+    navigate(`/gallery?event=${event._id}&clubId=${clubId}&action=upload`);
+  };
+
+  // Handle upload for non-photo items (report, attendance, bills)
   const handleUpload = async (uploadType) => {
     if (uploading) return;
     
+    // For photos, navigate to gallery instead
+    if (uploadType === 'photos') {
+      handleNavigateToGallery();
+      return;
+    }
+    
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = uploadType === 'photos' ? 'image/*' : 
-                   uploadType === 'report' ? '.pdf,.doc,.docx' :
+    input.accept = uploadType === 'report' ? '.pdf,.doc,.docx' :
                    uploadType === 'attendance' ? '.xlsx,.xls,.csv' :
                    uploadType === 'bills' ? '.pdf,image/*' : '*';
-    input.multiple = uploadType === 'photos' || uploadType === 'bills';
+    input.multiple = uploadType === 'bills';
     
     input.onchange = async (e) => {
       const files = Array.from(e.target.files);
       if (files.length === 0) return;
-
-      // Validate file count for photos
-      if (uploadType === 'photos' && files.length < 5) {
-        alert('⚠️ Please select at least 5 photos');
-        return;
-      }
 
       setUploading(true);
       setUploadingType(uploadType);
@@ -205,15 +212,25 @@ const CompletionChecklist = ({ event, onUploadComplete, canManage }) => {
               )}
             </div>
 
-            {canManage && !item.completed && (
+            {canManage && (
               <div className="item-action">
-                <button 
-                  className="btn btn-sm btn-primary"
-                  onClick={() => handleUpload(item.uploadType)}
-                  disabled={uploading}
-                >
-                  {uploading && uploadingType === item.uploadType ? '⏳ Uploading...' : '📤 Upload'}
-                </button>
+                {!item.completed ? (
+                  <button 
+                    className="btn btn-sm btn-primary"
+                    onClick={() => handleUpload(item.uploadType)}
+                    disabled={uploading}
+                  >
+                    {uploading && uploadingType === item.uploadType ? '⏳ Uploading...' : 
+                     item.uploadType === 'photos' ? '📸 Upload in Gallery' : '📤 Upload'}
+                  </button>
+                ) : item.uploadType === 'photos' ? (
+                  <button 
+                    className="btn btn-sm btn-outline"
+                    onClick={handleNavigateToGallery}
+                  >
+                    👁️ View in Gallery
+                  </button>
+                ) : null}
               </div>
             )}
           </div>

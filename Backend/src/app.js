@@ -70,10 +70,10 @@ app.use(maintenanceMode);
 app.use('/api/health', healthRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
-app.use('/api/clubs', clubRoutes);
+app.use('/api/clubs', clubRoutes); // Includes nested /documents routes
 app.use('/api/events', eventRoutes);
 app.use('/api', eventRegistrationRoutes); // Event registration routes
-app.use('/api/documents', documentRoutes);
+// app.use('/api/documents', documentRoutes); // Now nested under /api/clubs/:clubId/documents
 app.use('/api/recruitments', recruitmentRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/reports', reportRoutes);

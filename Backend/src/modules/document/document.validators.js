@@ -29,7 +29,8 @@ module.exports = {
 
   createAlbumSchema: Joi.object({
     name: Joi.string().min(1).max(100).required(),
-    description: Joi.string().max(500)
+    description: Joi.string().max(500).optional(),
+    eventId: objectId.optional()  // Allow linking album to event
   }),
 
   tagMembersSchema: Joi.object({

@@ -40,9 +40,36 @@ exports.download = async (req, res, next) => {
 
 exports.delete = async (req, res, next) => {
   try {
+    // Extract clubId from URL (middleware fallback)
+    let clubId = req.params.clubId;
+    
+    // If not in params, extract from baseUrl
+    if (!clubId && req.baseUrl) {
+      const match = req.baseUrl.match(/\/clubs\/([a-f0-9]+)/i);
+      if (match) {
+        clubId = match[1];
+        console.log('🔧 Extracted clubId from baseUrl:', clubId);
+      }
+    }
+    
+    // If still not found, try originalUrl
+    if (!clubId && req.originalUrl) {
+      const match = req.originalUrl.match(/\/clubs\/([a-f0-9]+)/i);
+      if (match) {
+        clubId = match[1];
+        console.log('🔧 Extracted clubId from originalUrl:', clubId);
+      }
+    }
+    
+    console.log('=== DELETE CONTROLLER DEBUG ===');
+    console.log('Final clubId:', clubId);
+    console.log('req.params.docId:', req.params.docId);
+    console.log('req.baseUrl:', req.baseUrl);
+    console.log('req.originalUrl:', req.originalUrl);
+    
     await svc.deleteDocument(
       req.params.docId,
-      req.params.clubId,
+      clubId,
       { id: req.user.id, ip: req.ip, userAgent: req.headers['user-agent'] }
     );
     successResponse(res, null, 'Document deleted');
@@ -58,7 +85,8 @@ exports.createAlbum = async (req, res, next) => {
       req.params.clubId,
       req.body.name,
       req.body.description,
-      { id: req.user.id, ip: req.ip, userAgent: req.headers['user-agent'] }
+      { id: req.user.id, ip: req.ip, userAgent: req.headers['user-agent'] },
+      req.body.eventId // Optional: Link album to event
     );
     successResponse(res, { album }, 'Album created successfully');
   } catch (err) {
@@ -141,6 +169,72 @@ exports.getDownloadUrl = async (req, res, next) => {
       { id: req.user.id, ip: req.ip, userAgent: req.headers['user-agent'] }
     );
     successResponse(res, downloadData, 'Download URL generated');
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Link Existing Photos to Events (Utility/Fix)
+exports.linkPhotosToEvents = async (req, res, next) => {
+  try {
+    const result = await svc.linkPhotosToEvents(req.params.clubId);
+    successResponse(res, result, 'Photos linked to events successfully');
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Get Storage Statistics for Club
+exports.getStorageStats = async (req, res, next) => {
+  try {
+    const stats = await svc.getStorageStats(req.params.clubId);
+    successResponse(res, stats, 'Storage statistics retrieved');
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Find Duplicate Images
+exports.findDuplicates = async (req, res, next) => {
+  try {
+    const duplicates = await svc.findDuplicates(req.params.clubId);
+    successResponse(res, { duplicates }, 'Duplicate detection completed');
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Generate Upload Signature for Direct Upload
+exports.getUploadSignature = async (req, res, next) => {
+  try {
+    const { album } = req.body;
+    const signature = await svc.getUploadSignature(req.params.clubId, album);
+    successResponse(res, signature, 'Upload signature generated');
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Add Google Drive Link
+exports.addDriveLink = async (req, res, next) => {
+  try {
+    const { album, driveUrl, folderName, photoCount, description } = req.body;
+    const driveDoc = await svc.addDriveLink(
+      req.params.clubId,
+      { id: req.user.id, ip: req.ip, userAgent: req.headers['user-agent'] },
+      { album, driveUrl, folderName, photoCount, description }
+    );
+    successResponse(res, { document: driveDoc }, 'Drive link added successfully');
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Get Photo Quota Status
+exports.getPhotoQuota = async (req, res, next) => {
+  try {
+    const quota = await svc.getPhotoQuota(req.params.clubId);
+    successResponse(res, quota, 'Photo quota retrieved');
   } catch (err) {
     next(err);
   }

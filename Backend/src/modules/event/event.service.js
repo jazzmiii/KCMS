@@ -167,6 +167,15 @@ class EventService {
       data.canManage = false;
     }
     
+    // ✅ Add dynamic photo count from Document collection
+    const { Document } = require('../document/document.model');
+    const photoCount = await Document.countDocuments({
+      event: id,
+      type: 'photo'
+    });
+    data.photos = data.photos || [];
+    data.photoCount = photoCount; // Add actual count for display
+    
     return data;
   }
 
@@ -500,7 +509,7 @@ class EventService {
       
       // Attendance by hour (for ongoing/completed events)
       Attendance.aggregate([
-        { $match: { event: mongoose.Types.ObjectId(eventId), status: 'present' } },
+        { $match: { event: new mongoose.Types.ObjectId(eventId), status: 'present' } },
         {
           $group: {
             _id: { $hour: '$timestamp' },
@@ -512,7 +521,7 @@ class EventService {
       
       // General attendance statistics
       Attendance.aggregate([
-        { $match: { event: mongoose.Types.ObjectId(eventId) } },
+        { $match: { event: new mongoose.Types.ObjectId(eventId) } },
         {
           $group: {
             _id: '$status',

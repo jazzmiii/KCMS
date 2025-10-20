@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import Layout from '../../components/Layout';
 import documentService from '../../services/documentService';
 import clubService from '../../services/clubService';
+import eventService from '../../services/eventService';
 import { useAuth } from '../../context/AuthContext';
 import { 
   FaImage, 
@@ -16,7 +17,12 @@ import {
 import '../../styles/Gallery.css';
 
 function GalleryPage() {
+  const { user, clubMemberships } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
+  const eventIdParam = searchParams.get('event');
+  const actionParam = searchParams.get('action');
+  const clubIdParam = searchParams.get('clubId');
+  
   const [documents, setDocuments] = useState([]);
   const [albums, setAlbums] = useState([]);
   const [selectedAlbum, setSelectedAlbum] = useState(searchParams.get('album') || 'all');
@@ -25,8 +31,11 @@ function GalleryPage() {
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showAlbumModal, setShowAlbumModal] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
+  const [showDriveLinkModal, setShowDriveLinkModal] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [eventContext, setEventContext] = useState(null);
+  const [photoQuota, setPhotoQuota] = useState(null);
   
   // Form states
   const [uploadFiles, setUploadFiles] = useState([]);
@@ -35,19 +44,49 @@ function GalleryPage() {
   const [uploadDescription, setUploadDescription] = useState('');
   const [newAlbumName, setNewAlbumName] = useState('');
   const [newAlbumDescription, setNewAlbumDescription] = useState('');
+  
+  // Drive link form states
+  const [driveUrl, setDriveUrl] = useState('');
+  const [driveFolderName, setDriveFolderName] = useState('');
+  const [drivePhotoCount, setDrivePhotoCount] = useState('');
+  const [driveDescription, setDriveDescription] = useState('');
 
   const [clubs, setClubs] = useState([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
+  // Check if user can upload to selected club
+  const canUpload = useMemo(() => {
+    if (user?.roles?.global === 'admin') return true;
+    if (!uploadClubId) return false;
+    
+    const membership = clubMemberships?.find(m => 
+      (m.club?._id || m.club) === uploadClubId
+    );
+    
+    const coreRoles = ['president', 'vicePresident', 'core', 'secretary', 
+                       'treasurer', 'leadPR', 'leadTech'];
+    
+    return membership && coreRoles.includes(membership.role);
+  }, [user, clubMemberships, uploadClubId]);
+
   useEffect(() => {
     fetchClubs();
   }, []);
+  
+  // Handle event context and auto-create album
+  useEffect(() => {
+    if (eventIdParam && clubIdParam) {
+      setUploadClubId(clubIdParam);
+      handleAutoCreateEventAlbum();
+    }
+  }, [eventIdParam, clubIdParam]);
 
   useEffect(() => {
     if (uploadClubId) {
       fetchDocuments();
       fetchAlbums();
+      fetchPhotoQuota();
     }
   }, [uploadClubId, selectedAlbum, searchQuery, page]);
 
@@ -62,7 +101,7 @@ function GalleryPage() {
       const params = {
         page,
         limit: 20,
-        type: 'image'
+        type: 'photo'
       };
 
       if (selectedAlbum && selectedAlbum !== 'all') {
@@ -92,10 +131,27 @@ function GalleryPage() {
 
     try {
       const response = await documentService.getAlbums(uploadClubId);
-      setAlbums(response.data || []);
+      // Backend returns { albums: [...] } or { data: { albums: [...] } }
+      const albumsList = response.albums || response.data?.albums || [];
+      setAlbums(albumsList);
     } catch (err) {
       console.error('Error fetching albums:', err);
       setAlbums([]);
+    }
+  };
+
+  const fetchPhotoQuota = async () => {
+    if (!uploadClubId) {
+      setPhotoQuota(null);
+      return;
+    }
+
+    try {
+      const response = await documentService.getPhotoQuota(uploadClubId);
+      setPhotoQuota(response.data);
+    } catch (err) {
+      console.error('Error fetching quota:', err);
+      setPhotoQuota(null);
     }
   };
 
@@ -106,6 +162,104 @@ function GalleryPage() {
     } catch (err) {
       console.error('Error fetching clubs:', err);
       setClubs([]);
+    }
+  };
+  
+  // Auto-create album for event
+  const handleAutoCreateEventAlbum = async () => {
+    if (!eventIdParam || !clubIdParam) {
+      console.error('Missing event ID or club ID');
+      return;
+    }
+    
+    try {
+      console.log('🔄 Auto-creating album for event:', eventIdParam);
+      
+      // Fetch event details
+      console.log('📡 Fetching event with ID:', eventIdParam);
+      const eventRes = await eventService.getById(eventIdParam);
+      console.log('📦 Raw eventRes:', JSON.stringify(eventRes, null, 2));
+      
+      // Backend returns: { status: 'success', data: { event: {...} } }
+      // eventService extracts response.data, so we get: { status, data: { event } }
+      const event = eventRes.data?.event || eventRes.event || eventRes.data || eventRes;
+      console.log('🎯 Extracted event:', { title: event?.title, dateTime: event?.dateTime, _id: event?._id });
+      
+      if (!event || !event.title || !event.dateTime) {
+        console.error('❌ Invalid event data:', event);
+        throw new Error('Invalid event data received');
+      }
+      
+      setEventContext(event);
+      
+      // Album name: "Tech Talk - 2024"
+      const eventYear = new Date(event.dateTime).getFullYear();
+      const albumName = `${event.title} - ${eventYear}`;
+      
+      console.log('📁 Album name:', albumName);
+      console.log('📅 Event:', event.title, 'Date:', event.dateTime);
+      
+      // Fetch existing albums directly (don't rely on state)
+      console.log('📂 Fetching albums for club:', clubIdParam);
+      
+      let existingAlbums = [];
+      try {
+        const albumsRes = await documentService.getAlbums(clubIdParam);
+        existingAlbums = albumsRes.albums || albumsRes.data?.albums || [];
+        console.log('📚 Existing albums:', existingAlbums.length);
+      } catch (albumErr) {
+        // If 404, it means no albums exist yet (first time), which is OK
+        if (albumErr.response?.status === 404) {
+          console.log('ℹ️ No albums endpoint or no albums yet - will create first album');
+          existingAlbums = [];
+        } else {
+          console.error('⚠️ Error fetching albums:', albumErr.message);
+          // Continue anyway - we'll try to create the album
+          existingAlbums = [];
+        }
+      }
+      
+      const existingAlbum = existingAlbums.find(a => a.name === albumName);
+      
+      if (!existingAlbum) {
+        console.log('✨ Creating new album...');
+        const albumData = {
+          name: albumName,
+          description: `Photos from ${event.title}`,
+          eventId: eventIdParam
+        };
+        console.log('📤 Sending album data:', albumData);
+        console.log('🏢 Club ID:', clubIdParam);
+        
+        try {
+          const createRes = await documentService.createAlbum(clubIdParam, albumData);
+          console.log('✅ Album created successfully!', createRes);
+        } catch (createErr) {
+          console.error('❌ Album creation failed:');
+          console.error('  Status:', createErr.response?.status);
+          console.error('  Message:', createErr.response?.data?.message || createErr.message);
+          console.error('  Full error:', createErr.response?.data);
+          throw createErr;
+        }
+      } else {
+        console.log('ℹ️ Album already exists');
+      }
+      
+      // Refresh albums list
+      await fetchAlbums();
+      
+      // Set selected album
+      setSelectedAlbum(albumName);
+      setUploadAlbum(albumName);
+      
+      // Open upload modal if action is upload
+      if (actionParam === 'upload' && canUpload) {
+        setTimeout(() => setShowUploadModal(true), 500); // Small delay for state updates
+      }
+      
+    } catch (err) {
+      console.error('❌ Error creating event album:', err);
+      alert(`Failed to create event album: ${err.response?.data?.message || err.message}`);
     }
   };
 
@@ -143,10 +297,40 @@ function GalleryPage() {
       setUploadFiles([]);
       setUploadDescription('');
       setUploadAlbum('');
-      fetchDocuments();
+      setEventContext(null); // Clear event context after upload
+      
+      // Clear URL parameters to prevent event context from being re-set on refresh
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete('event');
+      newParams.delete('action');
+      setSearchParams(newParams);
+      
+      await Promise.all([
+        fetchDocuments(),
+        fetchAlbums() // Refresh album list to update counts
+      ]);
     } catch (err) {
       console.error('Error uploading files:', err);
-      alert('Failed to upload files');
+      
+      // Check if it's a photo limit error
+      if (err.response?.data?.code === 'PHOTO_LIMIT_EXCEEDED') {
+        const details = err.response.data.details;
+        const message = err.response.data.message;
+        
+        const useDrive = window.confirm(
+          `${message}\n\n` +
+          `Cloudinary Quota: ${details.current}/${details.limit}\n` +
+          `Remaining: ${details.remaining} photos\n\n` +
+          `Would you like to add a Google Drive link instead?`
+        );
+        
+        if (useDrive) {
+          setShowUploadModal(false);
+          setShowDriveLinkModal(true);
+        }
+      } else {
+        alert(err.response?.data?.message || 'Failed to upload files');
+      }
     } finally {
       setUploading(false);
     }
@@ -180,20 +364,111 @@ function GalleryPage() {
     }
   };
 
-  const handleDelete = async (docId) => {
-    if (!window.confirm('Are you sure you want to delete this image?')) {
+  const handleAddDriveLink = async () => {
+    if (!driveUrl) {
+      alert('Please enter a Google Drive URL');
       return;
     }
 
-    if (!uploadClubId) return;
+    if (!uploadClubId) {
+      alert('Please select a club first');
+      return;
+    }
+
+    if (!uploadAlbum) {
+      alert('Please select or enter an album name');
+      return;
+    }
 
     try {
-      await documentService.delete(uploadClubId, docId);
-      alert('Image deleted successfully!');
-      fetchDocuments();
+      setUploading(true);
+      
+      await documentService.addDriveLink(uploadClubId, {
+        album: uploadAlbum,
+        driveUrl,
+        folderName: driveFolderName || uploadAlbum,
+        photoCount: parseInt(drivePhotoCount) || 0,
+        description: driveDescription
+      });
+
+      alert(`Drive link added successfully! ${drivePhotoCount || 0} photos linked to ${uploadAlbum}`);
+      setShowDriveLinkModal(false);
+      setDriveUrl('');
+      setDriveFolderName('');
+      setDrivePhotoCount('');
+      setDriveDescription('');
+      setUploadAlbum('');
+      setEventContext(null);
+      
+      await Promise.all([
+        fetchDocuments(),
+        fetchAlbums(),
+        fetchPhotoQuota()
+      ]);
     } catch (err) {
-      console.error('Error deleting image:', err);
-      alert('Failed to delete image');
+      console.error('Error adding Drive link:', err);
+      alert(err.response?.data?.message || 'Failed to add Drive link');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDelete = async (docId) => {
+    // Find the document in current list to verify club ownership
+    const doc = documents.find(d => d._id === docId);
+    if (doc) {
+      const docClubId = (doc.club?._id || doc.club)?.toString();
+      const currentClubId = uploadClubId?.toString();
+      
+      console.log('=== DELETE DEBUG ===');
+      console.log('Document ID:', docId);
+      console.log('Document club:', docClubId);
+      console.log('Selected club:', currentClubId);
+      console.log('Match:', docClubId === currentClubId);
+      
+      if (docClubId && currentClubId && docClubId !== currentClubId) {
+        alert(
+          `⚠️ Club Mismatch!\n\n` +
+          `This item belongs to a different club.\n` +
+          `Please switch to the correct club to delete it.\n\n` +
+          `Document Club ID: ${docClubId}\n` +
+          `Selected Club ID: ${currentClubId}`
+        );
+        return;
+      }
+    }
+
+    if (!window.confirm('Are you sure you want to delete this item?')) {
+      return;
+    }
+
+    if (!uploadClubId || loading) return;
+
+    try {
+      setLoading(true);
+      await documentService.delete(uploadClubId, docId);
+      alert('Item deleted successfully!');
+      await Promise.all([
+        fetchDocuments(),
+        fetchAlbums(),
+        fetchPhotoQuota()
+      ]);
+    } catch (err) {
+      console.error('Error deleting item:', err);
+      
+      // Handle 404 - item already deleted
+      if (err.response?.status === 404) {
+        alert('This item was already deleted. Refreshing gallery...');
+        await Promise.all([
+          fetchDocuments(),
+          fetchAlbums(),
+          fetchPhotoQuota()
+        ]);
+      } else {
+        alert(err.response?.data?.message || 'Failed to delete item');
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -202,7 +477,8 @@ function GalleryPage() {
 
     try {
       const response = await documentService.download(uploadClubId, doc._id);
-      documentService.downloadBlob(response.data, doc.filename || 'image.jpg');
+      const filename = doc.metadata?.filename || doc.album || 'image.jpg';
+      documentService.downloadBlob(response.data, filename);
     } catch (err) {
       console.error('Error downloading image:', err);
       alert('Failed to download image');
@@ -218,12 +494,49 @@ function GalleryPage() {
             <h1>Media Gallery</h1>
           </div>
           <div className="header-actions">
-            <button className="btn btn-secondary" onClick={() => setShowAlbumModal(true)}>
-              <FaFolderPlus /> New Album
-            </button>
-            <button className="btn btn-primary" onClick={() => setShowUploadModal(true)}>
-              <FaUpload /> Upload Images
-            </button>
+            {eventContext && (
+              <div className="event-context-badge">
+                <span>📸 Uploading for: {eventContext.title}</span>
+                <button 
+                  className="badge-close"
+                  onClick={() => {
+                    setEventContext(null);
+                    const newParams = new URLSearchParams(searchParams);
+                    newParams.delete('event');
+                    newParams.delete('action');
+                    setSearchParams(newParams);
+                  }}
+                  title="Clear event context"
+                >
+                  <FaTimes />
+                </button>
+              </div>
+            )}
+            {photoQuota && uploadClubId && (
+              <div className="quota-display" title={`${photoQuota.cloudinary.used}/${photoQuota.cloudinary.limit} Cloudinary photos used`}>
+                <span className={`quota-badge ${photoQuota.cloudinary.percentage >= 100 ? 'quota-full' : photoQuota.cloudinary.percentage >= 80 ? 'quota-warning' : ''}`}>
+                  📊 {photoQuota.cloudinary.used}/{photoQuota.cloudinary.limit} photos
+                  {photoQuota.drive.linkCount > 0 && ` + ${photoQuota.drive.estimatedPhotos} on Drive`}
+                </span>
+              </div>
+            )}
+            {canUpload ? (
+              <>
+                <button className="btn btn-secondary" onClick={() => setShowAlbumModal(true)}>
+                  <FaFolderPlus /> New Album
+                </button>
+                <button className="btn btn-secondary" onClick={() => setShowDriveLinkModal(true)}>
+                  <FaImage /> Add Drive Link
+                </button>
+                <button className="btn btn-primary" onClick={() => setShowUploadModal(true)}>
+                  <FaUpload /> Upload Images
+                </button>
+              </>
+            ) : uploadClubId ? (
+              <div className="upload-restricted-message">
+                <span>ℹ️ Only club core members can upload photos</span>
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -268,7 +581,7 @@ function GalleryPage() {
             >
               <option value="all">All Albums</option>
               {albums.map(album => (
-                <option key={album._id} value={album._id}>
+                <option key={album.name} value={album.name}>
                   {album.name} ({album.count || 0})
                 </option>
               ))}
@@ -295,43 +608,83 @@ function GalleryPage() {
           <>
             <div className="gallery-grid">
               {documents.map(doc => (
-                <div key={doc._id} className="gallery-item">
-                  <div className="image-wrapper" onClick={() => {
-                    setSelectedImage(doc);
-                    setShowImageModal(true);
-                  }}>
-                    <img 
-                      src={doc.url || doc.cloudinaryUrl} 
-                      alt={doc.description || doc.filename}
-                    />
-                    <div className="image-overlay">
-                      <button 
-                        className="overlay-btn"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDownload(doc);
-                        }}
-                      >
-                        <FaDownload />
-                      </button>
-                      <button 
-                        className="overlay-btn delete"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDelete(doc._id);
-                        }}
-                      >
-                        <FaTrash />
-                      </button>
+                doc.storageType === 'drive' ? (
+                  // Drive Link Card
+                  <div key={doc._id} className="gallery-item drive-link-card">
+                    <div className="drive-card-content">
+                      <div className="drive-icon">
+                        <FaImage size={48} />
+                      </div>
+                      <h4>{doc.driveMetadata?.folderName || doc.album || 'Google Drive Folder'}</h4>
+                      <p className="photo-count">
+                        {doc.driveMetadata?.photoCount || 0} photos
+                      </p>
+                      {doc.driveMetadata?.description && (
+                        <p className="drive-description">{doc.driveMetadata.description}</p>
+                      )}
+                      <div className="drive-actions">
+                        <a 
+                          href={doc.url} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="btn btn-primary btn-sm"
+                        >
+                          <FaImage /> Open in Drive
+                        </a>
+                        <button 
+                          className="btn btn-danger btn-sm"
+                          onClick={() => handleDelete(doc._id)}
+                        >
+                          <FaTrash /> Remove Link
+                        </button>
+                      </div>
+                    </div>
+                    <div className="image-info">
+                      <p className="image-meta">
+                        {doc.club?.name || 'Unknown Club'} • {new Date(doc.createdAt).toLocaleDateString()}
+                      </p>
                     </div>
                   </div>
-                  <div className="image-info">
-                    <p className="image-title">{doc.description || doc.filename}</p>
-                    <p className="image-meta">
-                      {doc.club?.name || 'Unknown Club'} • {new Date(doc.uploadedAt).toLocaleDateString()}
-                    </p>
+                ) : (
+                  // Regular Cloudinary Image
+                  <div key={doc._id} className="gallery-item">
+                    <div className="image-wrapper" onClick={() => {
+                      setSelectedImage(doc);
+                      setShowImageModal(true);
+                    }}>
+                      <img 
+                        src={doc.url || doc.cloudinaryUrl} 
+                        alt={doc.description || doc.filename}
+                      />
+                      <div className="image-overlay">
+                        <button 
+                          className="overlay-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDownload(doc);
+                          }}
+                        >
+                          <FaDownload />
+                        </button>
+                        <button 
+                          className="overlay-btn delete"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDelete(doc._id);
+                          }}
+                        >
+                          <FaTrash />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="image-info">
+                      <p className="image-title">{doc.metadata?.filename || doc.album || 'Untitled'}</p>
+                      <p className="image-meta">
+                        {doc.club?.name || 'Unknown Club'} • {new Date(doc.createdAt).toLocaleDateString()}
+                      </p>
+                    </div>
                   </div>
-                </div>
+                )
               ))}
             </div>
 
@@ -384,7 +737,7 @@ function GalleryPage() {
                   <select value={uploadAlbum} onChange={(e) => setUploadAlbum(e.target.value)}>
                     <option value="">-- No Album --</option>
                     {albums.map(album => (
-                      <option key={album._id} value={album._id}>{album.name}</option>
+                      <option key={album.name} value={album.name}>{album.name}</option>
                     ))}
                   </select>
                 </div>
@@ -464,6 +817,111 @@ function GalleryPage() {
                 </button>
                 <button className="btn btn-primary" onClick={handleCreateAlbum}>
                   Create Album
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Google Drive Link Modal */}
+        {showDriveLinkModal && (
+          <div className="modal-overlay" onClick={() => setShowDriveLinkModal(false)}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h2>Add Google Drive Link</h2>
+                <button className="close-btn" onClick={() => setShowDriveLinkModal(false)}>
+                  <FaTimes />
+                </button>
+              </div>
+              <div className="modal-body">
+                <div className="info-box">
+                  <p>📊 <strong>Cloudinary Limit:</strong> You've reached the 10 photo limit for direct uploads.</p>
+                  <p>💡 <strong>Solution:</strong> Add a Google Drive folder link to share unlimited additional photos!</p>
+                </div>
+
+                {photoQuota && (
+                  <div className="quota-info">
+                    <p>Current: {photoQuota.cloudinary.used}/{photoQuota.cloudinary.limit} Cloudinary photos</p>
+                    {photoQuota.drive.linkCount > 0 && (
+                      <p>+ {photoQuota.drive.estimatedPhotos} photos via {photoQuota.drive.linkCount} Drive link(s)</p>
+                    )}
+                  </div>
+                )}
+
+                <div className="form-group">
+                  <label>Select Club *</label>
+                  <select value={uploadClubId} onChange={(e) => setUploadClubId(e.target.value)}>
+                    <option value="">-- Select Club --</option>
+                    {clubs.map(club => (
+                      <option key={club._id} value={club._id}>{club.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label>Album *</label>
+                  <select value={uploadAlbum} onChange={(e) => setUploadAlbum(e.target.value)}>
+                    <option value="">-- Select Album --</option>
+                    {albums.map(album => (
+                      <option key={album.name} value={album.name}>{album.name}</option>
+                    ))}
+                  </select>
+                  <small>Select the album these photos belong to</small>
+                </div>
+
+                <div className="form-group">
+                  <label>Google Drive Folder URL *</label>
+                  <input
+                    type="url"
+                    value={driveUrl}
+                    onChange={(e) => setDriveUrl(e.target.value)}
+                    placeholder="https://drive.google.com/drive/folders/..."
+                  />
+                  <small>Right-click folder → Get link → Share with "Anyone with the link"</small>
+                </div>
+
+                <div className="form-group">
+                  <label>Folder Name (Optional)</label>
+                  <input
+                    type="text"
+                    value={driveFolderName}
+                    onChange={(e) => setDriveFolderName(e.target.value)}
+                    placeholder="e.g., Additional Event Photos"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Estimated Photo Count</label>
+                  <input
+                    type="number"
+                    value={drivePhotoCount}
+                    onChange={(e) => setDrivePhotoCount(e.target.value)}
+                    placeholder="e.g., 35"
+                    min="0"
+                  />
+                  <small>Approximately how many photos are in this folder?</small>
+                </div>
+
+                <div className="form-group">
+                  <label>Description (Optional)</label>
+                  <textarea
+                    value={driveDescription}
+                    onChange={(e) => setDriveDescription(e.target.value)}
+                    placeholder="Additional details about these photos..."
+                    rows="3"
+                  />
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button className="btn btn-secondary" onClick={() => setShowDriveLinkModal(false)}>
+                  Cancel
+                </button>
+                <button 
+                  className="btn btn-primary" 
+                  onClick={handleAddDriveLink}
+                  disabled={uploading || !driveUrl || !uploadAlbum}
+                >
+                  {uploading ? 'Adding...' : 'Add Drive Link'}
                 </button>
               </div>
             </div>
